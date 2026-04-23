@@ -45,48 +45,10 @@ mock.module('@actions/github', () => ({
 const { getChangedSkillFiles } = await import('./changed-files.ts');
 const { runSkillReview, extractJson } = await import('./skill-review.ts');
 const { postOrUpdateComment } = await import('./comment.ts');
-const { parseThreshold, parsePositiveInt } = await import('./main.ts');
+const { parsePositiveInt } = await import('./main.ts');
 
 // ---------------------------------------------------------------------------
-// 1. parseThreshold
-// ---------------------------------------------------------------------------
-
-describe('parseThreshold', () => {
-  test('returns 0 for undefined', () => {
-    expect(parseThreshold(undefined)).toBe(0);
-  });
-
-  test('returns 0 for "0"', () => {
-    expect(parseThreshold('0')).toBe(0);
-  });
-
-  test('returns 50 for "50"', () => {
-    expect(parseThreshold('50')).toBe(50);
-  });
-
-  test('returns 100 for "100"', () => {
-    expect(parseThreshold('100')).toBe(100);
-  });
-
-  test('throws for -1', () => {
-    expect(() => parseThreshold('-1')).toThrow('Invalid fail-threshold');
-  });
-
-  test('throws for 101', () => {
-    expect(() => parseThreshold('101')).toThrow('Invalid fail-threshold');
-  });
-
-  test('throws for NaN string', () => {
-    expect(() => parseThreshold('NaN')).toThrow('Invalid fail-threshold');
-  });
-
-  test('throws for "abc"', () => {
-    expect(() => parseThreshold('abc')).toThrow('Invalid fail-threshold');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 1b. parsePositiveInt
+// 1. parsePositiveInt
 // ---------------------------------------------------------------------------
 
 describe('parsePositiveInt', () => {

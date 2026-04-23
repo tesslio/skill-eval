@@ -1,5 +1,5 @@
-name: 'Tessl Skill Review & Eval'
-description: 'Review SKILL.md files in a PR and optionally run evals against tiles with scenarios'
+name: 'Tessl Skill Eval'
+description: 'Run Tessl evals against tiles with scenarios when SKILL.md files change in a PR'
 branding:
   icon: check-circle
   color: purple
@@ -10,15 +10,9 @@ inputs:
   comment:
     description: 'Whether to post results as a PR comment'
     default: 'true'
-  fail-threshold:
-    description: 'Minimum review score (0-100) required for each SKILL.md to pass. Set to 0 to never fail.'
-    default: '0'
-  eval:
-    description: 'Run evals against tiles with scenarios (requires TESSL_API_KEY)'
-    default: 'false'
   eval-workspace:
     description: 'Tessl workspace name for eval runs'
-    default: ''
+    required: true
   eval-agent:
     description: 'Agent:model pair for evals (e.g. claude:claude-sonnet-4-6)'
     default: 'claude:claude-sonnet-4-6'
@@ -29,14 +23,14 @@ inputs:
     description: 'Fail the check if any scenario scores worse with context than baseline'
     default: 'true'
   eval-generate-scenarios:
-    description: 'Generate fresh scenarios before running evals (requires eval: true)'
+    description: 'Generate fresh scenarios before running evals'
     default: 'false'
   eval-scenario-count:
-    description: 'Number of scenarios to generate per tile (default: 3)'
+    description: 'Number of scenarios to generate per tile'
     default: '3'
   tessl-api-key:
-    description: 'Tessl API key (required when eval is true). Pass via secrets.'
-    default: ''
+    description: 'Tessl API key. Pass via secrets.'
+    required: true
 runs:
   using: 'composite'
   steps:
@@ -50,8 +44,6 @@ runs:
       env:
         INPUT_PATH: ${{ inputs.path }}
         INPUT_COMMENT: ${{ inputs.comment }}
-        INPUT_FAIL_THRESHOLD: ${{ inputs.fail-threshold }}
-        INPUT_EVAL: ${{ inputs.eval }}
         INPUT_EVAL_WORKSPACE: ${{ inputs.eval-workspace }}
         INPUT_EVAL_AGENT: ${{ inputs.eval-agent }}
         INPUT_EVAL_TIMEOUT: ${{ inputs.eval-timeout }}
