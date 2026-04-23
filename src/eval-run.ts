@@ -116,10 +116,12 @@ export async function runEval(
     error,
   });
 
-  const startProc = Bun.spawn(
-    ['tessl', 'eval', 'run', tilePath, '--workspace', workspace, '--agent', agent, '--json'],
-    { stdout: 'pipe', stderr: 'pipe' },
-  );
+  const args = ['tessl', 'eval', 'run', tilePath, '--agent', agent, '--json'];
+  if (workspace) {
+    args.splice(4, 0, '--workspace', workspace);
+  }
+
+  const startProc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' });
 
   const [startStdout, startStderr] = await Promise.all([
     new Response(startProc.stdout).text(),

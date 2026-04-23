@@ -16,11 +16,6 @@ async function main(): Promise<void> {
   const generateScenarios = process.env.INPUT_EVAL_GENERATE_SCENARIOS === 'true';
   const scenarioCount = parsePositiveInt(process.env.INPUT_EVAL_SCENARIO_COUNT, 'eval-scenario-count', 3);
 
-  if (!evalWorkspace) {
-    core.setFailed('eval-workspace is required');
-    return;
-  }
-
   if (!process.env.TESSL_TOKEN) {
     core.setFailed('tessl-token is required. Pass your Tessl API token via secrets.');
     return;
