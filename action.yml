@@ -28,6 +28,12 @@ inputs:
   eval-fail-threshold:
     description: 'Minimum eval score (0-100) to pass. Set to 0 to never fail.'
     default: '0'
+  eval-generate-scenarios:
+    description: 'Generate fresh scenarios before running evals (requires eval: true)'
+    default: 'false'
+  eval-scenario-count:
+    description: 'Number of scenarios to generate per tile (default: 3)'
+    default: '3'
   tessl-api-key:
     description: 'Tessl API key (required when eval is true). Pass via secrets.'
     default: ''
@@ -50,5 +56,7 @@ runs:
         INPUT_EVAL_AGENT: ${{ inputs.eval-agent }}
         INPUT_EVAL_TIMEOUT: ${{ inputs.eval-timeout }}
         INPUT_EVAL_FAIL_THRESHOLD: ${{ inputs.eval-fail-threshold }}
+        INPUT_EVAL_GENERATE_SCENARIOS: ${{ inputs.eval-generate-scenarios }}
+        INPUT_EVAL_SCENARIO_COUNT: ${{ inputs.eval-scenario-count }}
         GITHUB_TOKEN: ${{ github.token }}
         TESSL_API_KEY: ${{ inputs.tessl-api-key }}
