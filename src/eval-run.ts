@@ -160,8 +160,15 @@ export async function runEval(
       stderr: 'pipe',
     });
 
-    const viewStdout = await new Response(viewProc.stdout).text();
-    await viewProc.exited;
+    const [viewStdout, viewStderr] = await Promise.all([
+      new Response(viewProc.stdout).text(),
+      new Response(viewProc.stderr).text(),
+    ]);
+
+    const viewExit = await viewProc.exited;
+    if (viewExit !== 0) {
+      return errorResult(`tessl eval view failed (exit ${viewExit}): ${viewStderr}`);
+    }
 
     const viewJson = extractJson(viewStdout);
     if (!viewJson) {
