@@ -38,3 +38,22 @@ export function findTileDirsWithEvals(filePaths: string[]): string[] {
 
   return result;
 }
+
+/**
+ * Given a list of changed file paths, find unique tile directories
+ * (regardless of whether they have an evals/ subdirectory).
+ */
+export function findTileDirs(filePaths: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const filePath of filePaths) {
+    const tileDir = findTileDir(filePath);
+    if (tileDir && !seen.has(tileDir)) {
+      seen.add(tileDir);
+      result.push(tileDir);
+    }
+  }
+
+  return result;
+}
