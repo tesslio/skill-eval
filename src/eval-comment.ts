@@ -19,7 +19,7 @@ function evalScoreBadge(score: number): string {
   return `![eval score](https://img.shields.io/badge/eval_score-${score}%25-${color})`;
 }
 
-export function formatEvalComment(results: EvalResult[], threshold: number): string {
+export function formatEvalComment(results: EvalResult[], failOnRegression: boolean): string {
   const sections = results.map((result) => {
     const displayPath = result.tilePath.replace(/^\.\//, '');
 
@@ -27,9 +27,9 @@ export function formatEvalComment(results: EvalResult[], threshold: number): str
       return `### \`${displayPath}\`\n\n> ⚠️ **Error:** ${escapeMarkdown(result.error)}\n`;
     }
 
-    const passEmoji =
-      threshold > 0 ? (result.overallScore >= threshold ? ' ✅' : ' ❌') : '';
-    const badge = result.overallScore >= 0 ? ` ${evalScoreBadge(result.overallScore)}${passEmoji}` : '';
+    const hasRegression = result.scenarios.some((s) => s.delta < 0);
+    const regressionEmoji = failOnRegression && hasRegression ? ' ❌ regression' : '';
+    const badge = result.overallScore >= 0 ? ` ${evalScoreBadge(result.overallScore)}${regressionEmoji}` : '';
 
     let body = `### \`${displayPath}\`\n${badge}\n`;
 
@@ -77,7 +77,7 @@ export function formatEvalComment(results: EvalResult[], threshold: number): str
 
 export async function postOrUpdateEvalComment(
   results: EvalResult[],
-  threshold: number,
+  failOnRegression: boolean,
 ): Promise<void> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
@@ -91,7 +91,7 @@ export async function postOrUpdateEvalComment(
 
   const octokit = github.getOctokit(token);
   const prNumber = context.payload.pull_request.number;
-  const body = formatEvalComment(results, threshold);
+  const body = formatEvalComment(results, failOnRegression);
 
   let existing: { id: number; body?: string | null } | undefined;
   let commentPage = 1;

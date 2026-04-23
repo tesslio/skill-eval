@@ -25,9 +25,9 @@ inputs:
   eval-timeout:
     description: 'Max minutes to wait for each eval run to complete'
     default: '45'
-  eval-fail-threshold:
-    description: 'Minimum eval score (0-100) to pass. Set to 0 to never fail.'
-    default: '0'
+  eval-fail-on-regression:
+    description: 'Fail the check if any scenario scores worse with context than baseline'
+    default: 'true'
   eval-generate-scenarios:
     description: 'Generate fresh scenarios before running evals (requires eval: true)'
     default: 'false'
@@ -55,7 +55,7 @@ runs:
         INPUT_EVAL_WORKSPACE: ${{ inputs.eval-workspace }}
         INPUT_EVAL_AGENT: ${{ inputs.eval-agent }}
         INPUT_EVAL_TIMEOUT: ${{ inputs.eval-timeout }}
-        INPUT_EVAL_FAIL_THRESHOLD: ${{ inputs.eval-fail-threshold }}
+        INPUT_EVAL_FAIL_ON_REGRESSION: ${{ inputs.eval-fail-on-regression }}
         INPUT_EVAL_GENERATE_SCENARIOS: ${{ inputs.eval-generate-scenarios }}
         INPUT_EVAL_SCENARIO_COUNT: ${{ inputs.eval-scenario-count }}
         GITHUB_TOKEN: ${{ github.token }}

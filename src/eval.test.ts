@@ -252,7 +252,7 @@ describe('formatEvalComment', () => {
     const { formatEvalComment } = await import('./eval-comment.ts');
     const body = formatEvalComment(
       [{ tilePath: '/tiles/my-tile', runId: 'run-123', status: 'completed', overallScore: 72, scenarios: [] }],
-      0,
+      false,
     );
     expect(body).toContain('<!-- tessl-skill-eval -->');
   });
@@ -264,7 +264,7 @@ describe('formatEvalComment', () => {
         tilePath: '/tiles/my-tile', runId: 'run-123', status: 'completed', overallScore: 75,
         scenarios: [{ name: 'abc12345', baselineScore: 40, withContextScore: 75, delta: 35, criteria: [] }],
       }],
-      0,
+      false,
     );
     expect(body).toContain('Baseline');
     expect(body).toContain('With Context');
@@ -280,29 +280,42 @@ describe('formatEvalComment', () => {
         tilePath: '/tiles/my-tile', runId: 'run-123', status: 'completed', overallScore: 30,
         scenarios: [{ name: 'abc12345', baselineScore: 50, withContextScore: 30, delta: -20, criteria: [] }],
       }],
-      0,
+      false,
     );
     expect(body).toContain('🔻');
   });
 
-  test('shows pass/fail emoji when threshold is set', async () => {
+  test('shows regression label when failOnRegression is true and delta is negative', async () => {
     const { formatEvalComment } = await import('./eval-comment.ts');
     const body = formatEvalComment(
-      [
-        { tilePath: '/tiles/passing', runId: 'run-1', status: 'completed', overallScore: 80, scenarios: [] },
-        { tilePath: '/tiles/failing', runId: 'run-2', status: 'completed', overallScore: 30, scenarios: [] },
-      ],
-      50,
+      [{
+        tilePath: '/tiles/regressed', runId: 'run-1', status: 'completed', overallScore: 30,
+        scenarios: [{ name: 'abc12345', baselineScore: 50, withContextScore: 30, delta: -20, criteria: [] }],
+      }],
+      true,
     );
-    expect(body).toContain('✅');
     expect(body).toContain('❌');
+    expect(body).toContain('regression');
+  });
+
+  test('no regression label when failOnRegression is false', async () => {
+    const { formatEvalComment } = await import('./eval-comment.ts');
+    const body = formatEvalComment(
+      [{
+        tilePath: '/tiles/regressed', runId: 'run-1', status: 'completed', overallScore: 30,
+        scenarios: [{ name: 'abc12345', baselineScore: 50, withContextScore: 30, delta: -20, criteria: [] }],
+      }],
+      false,
+    );
+    expect(body).not.toContain('❌');
+    expect(body).not.toContain('regression');
   });
 
   test('shows error for failed eval', async () => {
     const { formatEvalComment } = await import('./eval-comment.ts');
     const body = formatEvalComment(
       [{ tilePath: '/tiles/broken', runId: 'run-1', status: 'failed', overallScore: -1, scenarios: [], error: 'Auth failed' }],
-      0,
+      false,
     );
     expect(body).toContain('⚠️');
     expect(body).toContain('Auth failed');

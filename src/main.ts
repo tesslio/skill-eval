@@ -14,14 +14,14 @@ const CONCURRENCY_LIMIT = 5;
 async function main(): Promise<void> {
   const rootPath = process.env.INPUT_PATH || '.';
   const shouldComment = process.env.INPUT_COMMENT !== 'false';
-  const threshold = parseThreshold(process.env.INPUT_FAIL_THRESHOLD);
+  const threshold = parseThreshold(process.env.INPUT_FAIL_THRESHOLD, 'fail-threshold');
 
   // Eval config
   const evalEnabled = process.env.INPUT_EVAL === 'true';
   const evalWorkspace = process.env.INPUT_EVAL_WORKSPACE || '';
   const evalAgent = process.env.INPUT_EVAL_AGENT || 'claude:claude-sonnet-4-6';
   const evalTimeout = Number(process.env.INPUT_EVAL_TIMEOUT || '45');
-  const evalThreshold = parseThreshold(process.env.INPUT_EVAL_FAIL_THRESHOLD);
+  const failOnRegression = process.env.INPUT_EVAL_FAIL_ON_REGRESSION !== 'false';
   const generateScenarios = process.env.INPUT_EVAL_GENERATE_SCENARIOS === 'true';
   const scenarioCount = Number(process.env.INPUT_EVAL_SCENARIO_COUNT || '3');
 
@@ -141,24 +141,26 @@ async function main(): Promise<void> {
   // 6. Post eval PR comment
   if (shouldComment) {
     try {
-      await postOrUpdateEvalComment(evalResults, evalThreshold);
+      await postOrUpdateEvalComment(evalResults, failOnRegression);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       core.warning(`Could not post eval PR comment: ${msg}`);
     }
   }
 
-  // 7. Check eval threshold
-  if (evalThreshold > 0) {
-    const failed = evalResults.filter(
-      (r) => r.status !== 'completed' || r.overallScore < evalThreshold,
+  // 7. Check for regressions (with-context scored worse than baseline)
+  if (failOnRegression) {
+    const regressions = evalResults.flatMap((r) =>
+      r.scenarios
+        .filter((s) => s.delta < 0)
+        .map((s) => ({ tilePath: r.tilePath, scenario: s.name, delta: s.delta })),
     );
-    if (failed.length > 0) {
-      const summary = failed
-        .map((r) => `  ${r.tilePath}: ${r.overallScore >= 0 ? `${r.overallScore}%` : r.error ?? 'error'}`)
+    if (regressions.length > 0) {
+      const summary = regressions
+        .map((r) => `  ${r.tilePath} / ${r.scenario}: ${r.delta}%`)
         .join('\n');
       core.setFailed(
-        `${failed.length} eval(s) below threshold of ${evalThreshold}%:\n${summary}`,
+        `Skill regression: ${regressions.length} scenario(s) scored worse with context than baseline:\n${summary}`,
       );
     }
   }
@@ -166,11 +168,11 @@ async function main(): Promise<void> {
   console.log('Eval phase completed.');
 }
 
-export function parseThreshold(value: string | undefined): number {
+export function parseThreshold(value: string | undefined, inputName = 'fail-threshold'): number {
   const num = Number(value ?? '0');
   if (Number.isNaN(num) || num < 0 || num > 100) {
     throw new Error(
-      `Invalid fail-threshold: ${value}. Must be a number between 0 and 100.`,
+      `Invalid ${inputName}: ${value}. Must be a number between 0 and 100.`,
     );
   }
   return num;

@@ -73,7 +73,7 @@ The eval feature runs `tessl eval run` against tiles that contain eval scenarios
 | `eval-workspace` | Tessl workspace name for eval runs | (required when `eval` is `true`) |
 | `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
 | `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |
-| `eval-fail-threshold` | Minimum eval score (0-100) to pass. Set to `0` to never fail. | `0` |
+| `eval-fail-on-regression` | Fail the check if any scenario scores worse with context than baseline | `true` |
 | `eval-generate-scenarios` | Generate fresh scenarios before running evals | `false` |
 | `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
 | `tessl-api-key` | Tessl API key. Pass via secrets. | (required when `eval` is `true`) |
@@ -101,7 +101,7 @@ jobs:
           eval-workspace: my-workspace
           eval-agent: claude:claude-sonnet-4-6
           eval-timeout: 45
-          eval-fail-threshold: 60
+          eval-fail-on-regression: true
           tessl-api-key: ${{ secrets.TESSL_API_KEY }}
 ```
 
