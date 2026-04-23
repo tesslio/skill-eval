@@ -1,10 +1,12 @@
-/** Raw JSON shape returned by `tessl eval run --json` */
+/** Raw JSON shape returned by `tessl eval run --json` (array element) */
 export interface EvalRunResponse {
-  id: string;
-  status: string;
+  evalRunId: string;
+  agent: string;
+  model: string;
+  scenariosCount: number;
 }
 
-/** Raw assessment criterion from `tessl eval view --json` */
+/** Raw assessment criterion from eval view */
 export interface RawAssessmentResult {
   name: string;
   score: number;
@@ -12,12 +14,29 @@ export interface RawAssessmentResult {
   reasoning: string;
 }
 
-/** Raw solution from `tessl eval view --json` */
+/** Raw solution from eval view (nested under scenario) */
 export interface RawSolution {
-  scenario_fingerprint: string;
+  id: string;
   variant: string;
-  score: number;
-  assessment_results: RawAssessmentResult[];
+  assessmentResults: RawAssessmentResult[];
+}
+
+/** Raw scenario from eval view (data.attributes.scenarios[]) */
+export interface RawScenario {
+  id: string;
+  fingerprint: string;
+  solutions: RawSolution[];
+}
+
+/** JSON:API response from `tessl eval view --json` */
+export interface EvalViewResponse {
+  data: {
+    id: string;
+    attributes: {
+      status: string;
+      scenarios: RawScenario[];
+    };
+  };
 }
 
 /** Parsed per-criterion result */

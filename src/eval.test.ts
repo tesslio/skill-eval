@@ -180,61 +180,87 @@ describe('runEval', () => {
 describe('parseEvalViewOutput', () => {
   test('parses completed eval with baseline and with-context solutions', async () => {
     const viewOutput = JSON.stringify({
-      id: 'run-123',
-      status: 'completed',
-      results: [
-        {
-          scenario_fingerprint: 'abc123',
-          variant: 'baseline',
-          score: 40,
-          assessment_results: [
-            { name: 'correctness', score: 10, max_score: 25, reasoning: 'Partial' },
+      data: {
+        id: 'run-123',
+        attributes: {
+          status: 'completed',
+          scenarios: [
+            {
+              id: 's1',
+              fingerprint: 'abc12345deadbeef',
+              solutions: [
+                {
+                  id: 'sol1',
+                  variant: 'baseline',
+                  assessmentResults: [
+                    { name: 'correctness', score: 10, max_score: 25, reasoning: 'Partial' },
+                  ],
+                },
+                {
+                  id: 'sol2',
+                  variant: 'with-context',
+                  assessmentResults: [
+                    { name: 'correctness', score: 20, max_score: 25, reasoning: 'Good' },
+                  ],
+                },
+              ],
+            },
           ],
         },
-        {
-          scenario_fingerprint: 'abc123',
-          variant: 'usage-spec',
-          score: 75,
-          assessment_results: [
-            { name: 'correctness', score: 20, max_score: 25, reasoning: 'Good' },
-          ],
-        },
-      ],
+      },
     });
 
     const { parseEvalViewOutput } = await import('./eval-run.ts');
     const result = parseEvalViewOutput(viewOutput, '/tile', 'run-123');
     expect(result.status).toBe('completed');
-    expect(result.overallScore).toBe(75);
+    expect(result.overallScore).toBe(80); // 20/25 = 80%
     expect(result.scenarios).toHaveLength(1);
-    expect(result.scenarios[0]!.baselineScore).toBe(40);
-    expect(result.scenarios[0]!.withContextScore).toBe(75);
-    expect(result.scenarios[0]!.delta).toBe(35);
+    expect(result.scenarios[0]!.baselineScore).toBe(40); // 10/25 = 40%
+    expect(result.scenarios[0]!.withContextScore).toBe(80);
+    expect(result.scenarios[0]!.delta).toBe(40);
   });
 
   test('handles multiple scenarios', async () => {
     const viewOutput = JSON.stringify({
-      id: 'run-456',
-      status: 'completed',
-      results: [
-        { scenario_fingerprint: 'aaa', variant: 'baseline', score: 30, assessment_results: [] },
-        { scenario_fingerprint: 'aaa', variant: 'usage-spec', score: 60, assessment_results: [] },
-        { scenario_fingerprint: 'bbb', variant: 'baseline', score: 50, assessment_results: [] },
-        { scenario_fingerprint: 'bbb', variant: 'usage-spec', score: 80, assessment_results: [] },
-      ],
+      data: {
+        id: 'run-456',
+        attributes: {
+          status: 'completed',
+          scenarios: [
+            {
+              id: 's1', fingerprint: 'aaaa1111',
+              solutions: [
+                { id: 'a', variant: 'baseline', assessmentResults: [{ name: 'q', score: 3, max_score: 10, reasoning: '' }] },
+                { id: 'b', variant: 'with-context', assessmentResults: [{ name: 'q', score: 6, max_score: 10, reasoning: '' }] },
+              ],
+            },
+            {
+              id: 's2', fingerprint: 'bbbb2222',
+              solutions: [
+                { id: 'c', variant: 'baseline', assessmentResults: [{ name: 'q', score: 5, max_score: 10, reasoning: '' }] },
+                { id: 'd', variant: 'with-context', assessmentResults: [{ name: 'q', score: 8, max_score: 10, reasoning: '' }] },
+              ],
+            },
+          ],
+        },
+      },
     });
 
     const { parseEvalViewOutput } = await import('./eval-run.ts');
     const result = parseEvalViewOutput(viewOutput, '/tile', 'run-456');
     expect(result.scenarios).toHaveLength(2);
-    expect(result.overallScore).toBe(70);
+    expect(result.overallScore).toBe(70); // avg of 60% and 80%
   });
 
   test('returns failed result for failed status', async () => {
     const viewOutput = JSON.stringify({
-      id: 'run-789',
-      status: 'failed',
-      results: [],
+      data: {
+        id: 'run-789',
+        attributes: {
+          status: 'failed',
+          scenarios: [],
+        },
+      },
     });
 
     const { parseEvalViewOutput } = await import('./eval-run.ts');

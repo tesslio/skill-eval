@@ -4,12 +4,28 @@ import type {
   EvalResult,
   EvalScenario,
   EvalCriterion,
-  EvalRunResponse,
+  EvalViewResponse,
+  RawScenario,
   RawSolution,
 } from './eval-types.ts';
 
 const POLL_INTERVAL_MS = 30_000;
 
+/** Compute a solution's total score as percentage of max possible. */
+function solutionScore(solution: RawSolution): number {
+  const results = solution.assessmentResults ?? [];
+  if (results.length === 0) return 0;
+  const earned = results.reduce((sum, r) => sum + r.score, 0);
+  const max = results.reduce((sum, r) => sum + r.max_score, 0);
+  return max > 0 ? Math.round((earned / max) * 100) : 0;
+}
+
+/**
+ * Parse the JSON:API output of `tessl eval view <id> --json` into an EvalResult.
+ *
+ * Response shape:
+ *   { data: { id, attributes: { status, scenarios: [{ fingerprint, solutions: [{ variant, assessmentResults }] }] } } }
+ */
 export function parseEvalViewOutput(
   rawOutput: string,
   tilePath: string,
@@ -27,7 +43,7 @@ export function parseEvalViewOutput(
     };
   }
 
-  let parsed: { id?: string; status?: string; results?: RawSolution[] };
+  let parsed: EvalViewResponse;
   try {
     parsed = JSON.parse(jsonStr);
   } catch {
@@ -41,7 +57,19 @@ export function parseEvalViewOutput(
     };
   }
 
-  if (parsed.status === 'failed') {
+  const attrs = parsed.data?.attributes;
+  if (!attrs) {
+    return {
+      tilePath,
+      runId,
+      status: 'failed',
+      overallScore: -1,
+      scenarios: [],
+      error: 'Unexpected eval view response structure',
+    };
+  }
+
+  if (attrs.status === 'failed') {
     return {
       tilePath,
       runId,
@@ -52,25 +80,18 @@ export function parseEvalViewOutput(
     };
   }
 
-  const results = parsed.results ?? [];
-
-  const byScenario = new Map<string, { baseline?: RawSolution; withContext?: RawSolution }>();
-  for (const sol of results) {
-    const key = sol.scenario_fingerprint;
-    const entry = byScenario.get(key) ?? {};
-    if (sol.variant === 'baseline') {
-      entry.baseline = sol;
-    } else {
-      entry.withContext = sol;
-    }
-    byScenario.set(key, entry);
-  }
-
+  const rawScenarios: RawScenario[] = attrs.scenarios ?? [];
   const scenarios: EvalScenario[] = [];
-  for (const [fingerprint, { baseline, withContext }] of byScenario) {
-    const baselineScore = baseline?.score ?? 0;
-    const withContextScore = withContext?.score ?? 0;
-    const criteria: EvalCriterion[] = (withContext?.assessment_results ?? []).map((r) => ({
+
+  for (const raw of rawScenarios) {
+    const solutions = raw.solutions ?? [];
+    const baseline = solutions.find((s) => s.variant === 'baseline');
+    const withContext = solutions.find((s) => s.variant !== 'baseline');
+
+    const baselineScoreVal = baseline ? solutionScore(baseline) : 0;
+    const withContextScoreVal = withContext ? solutionScore(withContext) : 0;
+
+    const criteria: EvalCriterion[] = (withContext?.assessmentResults ?? []).map((r) => ({
       name: r.name,
       score: r.score,
       maxScore: r.max_score,
@@ -78,10 +99,10 @@ export function parseEvalViewOutput(
     }));
 
     scenarios.push({
-      name: fingerprint.slice(0, 8),
-      baselineScore,
-      withContextScore,
-      delta: withContextScore - baselineScore,
+      name: raw.fingerprint.slice(0, 8),
+      baselineScore: baselineScoreVal,
+      withContextScore: withContextScoreVal,
+      delta: withContextScoreVal - baselineScoreVal,
       criteria,
     });
   }
@@ -99,6 +120,18 @@ export function parseEvalViewOutput(
     overallScore,
     scenarios,
   };
+}
+
+/** Extract status from the JSON:API eval view response. */
+function extractStatus(rawOutput: string): string | undefined {
+  const jsonStr = extractJson(rawOutput);
+  if (!jsonStr) return undefined;
+  try {
+    const parsed = JSON.parse(jsonStr) as EvalViewResponse;
+    return parsed.data?.attributes?.status;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function runEval(
@@ -138,18 +171,18 @@ export async function runEval(
     return errorResult('Could not parse tessl eval run output');
   }
 
-  let startParsed: EvalRunResponse;
+  let startParsed: Record<string, unknown>;
   try {
     startParsed = JSON.parse(startJson);
   } catch {
     return errorResult('Invalid JSON from tessl eval run');
   }
 
-  if (!startParsed.id) {
+  // The CLI returns [{ evalRunId }] — extractJson grabs the first object
+  const runId = (startParsed.evalRunId ?? startParsed.id) as string | undefined;
+  if (!runId) {
     return errorResult('No run id returned from tessl eval run');
   }
-
-  const runId = startParsed.id;
   core.info(`Eval run started: ${runId}`);
 
   const deadline = Date.now() + timeoutMinutes * 60_000;
@@ -172,25 +205,17 @@ export async function runEval(
       return errorResult(`tessl eval view failed (exit ${viewExit}): ${viewStderr}`);
     }
 
-    const viewJson = extractJson(viewStdout);
-    if (!viewJson) {
+    const status = extractStatus(viewStdout);
+    if (!status) {
       core.info(`Eval ${runId}: waiting (could not parse status)...`);
       continue;
     }
 
-    let viewParsed: { status?: string };
-    try {
-      viewParsed = JSON.parse(viewJson);
-    } catch {
-      core.info(`Eval ${runId}: waiting (invalid JSON)...`);
-      continue;
-    }
-
-    if (viewParsed.status === 'completed' || viewParsed.status === 'failed') {
+    if (status === 'completed' || status === 'failed') {
       return parseEvalViewOutput(viewStdout, tilePath, runId);
     }
 
-    core.info(`Eval ${runId}: ${viewParsed.status ?? 'unknown'}... waiting`);
+    core.info(`Eval ${runId}: ${status}... waiting`);
   }
 
   return {
