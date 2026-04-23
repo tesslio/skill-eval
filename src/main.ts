@@ -3,10 +3,11 @@ import { getChangedSkillFiles } from './changed-files.ts';
 import { postOrUpdateComment } from './comment.ts';
 import { postOrUpdateEvalComment } from './eval-comment.ts';
 import { runEval } from './eval-run.ts';
-import { findTileDirsWithEvals } from './find-tiles.ts';
+import { findTileDirs, findTileDirsWithEvals } from './find-tiles.ts';
 import type { SkillReviewResult } from './skill-review.ts';
 import { runSkillReview } from './skill-review.ts';
 import type { EvalResult } from './eval-types.ts';
+import { generateAndDownloadScenarios } from './scenario-generate.ts';
 
 const CONCURRENCY_LIMIT = 5;
 
@@ -21,6 +22,8 @@ async function main(): Promise<void> {
   const evalAgent = process.env.INPUT_EVAL_AGENT || 'claude:claude-sonnet-4-6';
   const evalTimeout = Number(process.env.INPUT_EVAL_TIMEOUT || '45');
   const evalThreshold = parseThreshold(process.env.INPUT_EVAL_FAIL_THRESHOLD);
+  const generateScenarios = process.env.INPUT_EVAL_GENERATE_SCENARIOS === 'true';
+  const scenarioCount = Number(process.env.INPUT_EVAL_SCENARIO_COUNT || '3');
 
   // 1. Detect changed SKILL.md files
   const changedFiles = await getChangedSkillFiles(rootPath);
@@ -92,14 +95,40 @@ async function main(): Promise<void> {
     return;
   }
 
-  const tileDirs = findTileDirsWithEvals(changedFiles);
-  if (tileDirs.length === 0) {
-    console.log('No tile directories with evals/ found. Skipping eval phase.');
-    return;
+  // 5a. Find tile directories
+  let tileDirs: string[];
+
+  if (generateScenarios) {
+    // When generating scenarios, find all tiles (don't require existing evals/)
+    tileDirs = findTileDirs(changedFiles);
+    if (tileDirs.length === 0) {
+      console.log('No tile directories found. Skipping eval phase.');
+      return;
+    }
+
+    console.log(`Found ${tileDirs.length} tile(s): ${tileDirs.join(', ')}`);
+
+    // 5b. Generate scenarios for each tile
+    for (const tileDir of tileDirs) {
+      console.log(`Generating ${scenarioCount} scenario(s) for ${tileDir}...`);
+      const genResult = await generateAndDownloadScenarios(tileDir, scenarioCount, evalTimeout);
+      if (!genResult.success) {
+        core.warning(`Scenario generation failed for ${tileDir}: ${genResult.error}`);
+      } else {
+        console.log(`  Scenarios ready (generation ${genResult.generationId})`);
+      }
+    }
+  } else {
+    tileDirs = findTileDirsWithEvals(changedFiles);
+    if (tileDirs.length === 0) {
+      console.log('No tile directories with evals/ found. Skipping eval phase.');
+      return;
+    }
+
+    console.log(`Found ${tileDirs.length} tile(s) with evals: ${tileDirs.join(', ')}`);
   }
 
-  console.log(`Found ${tileDirs.length} tile(s) with evals: ${tileDirs.join(', ')}`);
-
+  // 5c. Run evals
   const evalResults: EvalResult[] = [];
   for (const tileDir of tileDirs) {
     console.log(`Running eval for ${tileDir}...`);
