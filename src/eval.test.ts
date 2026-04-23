@@ -308,3 +308,50 @@ describe('formatEvalComment', () => {
     expect(body).toContain('Auth failed');
   });
 });
+
+// ---------------------------------------------------------------------------
+// 4. scenario-generate: generateAndDownloadScenarios
+// ---------------------------------------------------------------------------
+
+describe('generateAndDownloadScenarios', () => {
+  let originalSpawn: typeof Bun.spawn;
+
+  beforeEach(() => {
+    originalSpawn = Bun.spawn;
+  });
+
+  afterEach(() => {
+    // @ts-ignore restoring original
+    Bun.spawn = originalSpawn;
+  });
+
+  test('returns error when generate command fails', async () => {
+    // @ts-expect-error mock assignment
+    Bun.spawn = makeMockSpawn('', 'not authenticated', 1);
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    const result = await generateAndDownloadScenarios('/tile', 3, 1);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('not authenticated');
+  });
+
+  test('returns error when generate output has no id', async () => {
+    // @ts-expect-error mock assignment
+    Bun.spawn = makeMockSpawn('{"status": "pending"}', '', 0);
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    const result = await generateAndDownloadScenarios('/tile', 3, 1);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('id');
+  });
+
+  test('returns error when generate output has no JSON', async () => {
+    // @ts-expect-error mock assignment
+    Bun.spawn = makeMockSpawn('no json', '', 0);
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    const result = await generateAndDownloadScenarios('/tile', 3, 1);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('parse');
+  });
+});
