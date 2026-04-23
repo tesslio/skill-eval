@@ -45,7 +45,7 @@ mock.module('@actions/github', () => ({
 const { getChangedSkillFiles } = await import('./changed-files.ts');
 const { runSkillReview, extractJson } = await import('./skill-review.ts');
 const { postOrUpdateComment } = await import('./comment.ts');
-const { parseThreshold } = await import('./main.ts');
+const { parseThreshold, parsePositiveInt } = await import('./main.ts');
 
 // ---------------------------------------------------------------------------
 // 1. parseThreshold
@@ -82,6 +82,44 @@ describe('parseThreshold', () => {
 
   test('throws for "abc"', () => {
     expect(() => parseThreshold('abc')).toThrow('Invalid fail-threshold');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 1b. parsePositiveInt
+// ---------------------------------------------------------------------------
+
+describe('parsePositiveInt', () => {
+  test('returns default for undefined', () => {
+    expect(parsePositiveInt(undefined, 'eval-timeout', 45)).toBe(45);
+  });
+
+  test('returns default for empty string', () => {
+    expect(parsePositiveInt('', 'eval-timeout', 45)).toBe(45);
+  });
+
+  test('returns parsed value for valid integer', () => {
+    expect(parsePositiveInt('10', 'eval-timeout', 45)).toBe(10);
+  });
+
+  test('throws for non-numeric string', () => {
+    expect(() => parsePositiveInt('abc', 'eval-timeout', 45)).toThrow('Invalid eval-timeout');
+  });
+
+  test('throws for zero', () => {
+    expect(() => parsePositiveInt('0', 'eval-scenario-count', 3)).toThrow('Invalid eval-scenario-count');
+  });
+
+  test('throws for negative number', () => {
+    expect(() => parsePositiveInt('-5', 'eval-timeout', 45)).toThrow('Invalid eval-timeout');
+  });
+
+  test('throws for float', () => {
+    expect(() => parsePositiveInt('3.5', 'eval-scenario-count', 3)).toThrow('Invalid eval-scenario-count');
+  });
+
+  test('throws for NaN', () => {
+    expect(() => parsePositiveInt('NaN', 'eval-timeout', 45)).toThrow('Invalid eval-timeout');
   });
 });
 

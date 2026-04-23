@@ -20,10 +20,10 @@ async function main(): Promise<void> {
   const evalEnabled = process.env.INPUT_EVAL === 'true';
   const evalWorkspace = process.env.INPUT_EVAL_WORKSPACE || '';
   const evalAgent = process.env.INPUT_EVAL_AGENT || 'claude:claude-sonnet-4-6';
-  const evalTimeout = Number(process.env.INPUT_EVAL_TIMEOUT || '45');
+  const evalTimeout = parsePositiveInt(process.env.INPUT_EVAL_TIMEOUT, 'eval-timeout', 45);
   const failOnRegression = process.env.INPUT_EVAL_FAIL_ON_REGRESSION !== 'false';
   const generateScenarios = process.env.INPUT_EVAL_GENERATE_SCENARIOS === 'true';
-  const scenarioCount = Number(process.env.INPUT_EVAL_SCENARIO_COUNT || '3');
+  const scenarioCount = parsePositiveInt(process.env.INPUT_EVAL_SCENARIO_COUNT, 'eval-scenario-count', 3);
 
   // 1. Detect changed SKILL.md files
   const changedFiles = await getChangedSkillFiles(rootPath);
@@ -173,6 +173,21 @@ export function parseThreshold(value: string | undefined, inputName = 'fail-thre
   if (Number.isNaN(num) || num < 0 || num > 100) {
     throw new Error(
       `Invalid ${inputName}: ${value}. Must be a number between 0 and 100.`,
+    );
+  }
+  return num;
+}
+
+export function parsePositiveInt(
+  value: string | undefined,
+  inputName: string,
+  defaultValue: number,
+): number {
+  if (value === undefined || value === '') return defaultValue;
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 1 || !Number.isInteger(num)) {
+    throw new Error(
+      `Invalid ${inputName}: ${value}. Must be a positive integer.`,
     );
   }
   return num;
