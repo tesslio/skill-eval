@@ -108,16 +108,29 @@ async function main(): Promise<void> {
 
     console.log(`Found ${tileDirs.length} tile(s): ${tileDirs.join(', ')}`);
 
-    // 5b. Generate scenarios for each tile
+    // 5b. Generate scenarios for each tile (fail fast — generation is required)
+    const readyTiles: string[] = [];
+    const genFailures: string[] = [];
+
     for (const tileDir of tileDirs) {
       console.log(`Generating ${scenarioCount} scenario(s) for ${tileDir}...`);
       const genResult = await generateAndDownloadScenarios(tileDir, scenarioCount, evalTimeout);
       if (!genResult.success) {
-        core.warning(`Scenario generation failed for ${tileDir}: ${genResult.error}`);
+        genFailures.push(`  ${tileDir}: ${genResult.error}`);
       } else {
         console.log(`  Scenarios ready (generation ${genResult.generationId})`);
+        readyTiles.push(tileDir);
       }
     }
+
+    if (genFailures.length > 0) {
+      core.setFailed(
+        `Scenario generation failed for ${genFailures.length} tile(s):\n${genFailures.join('\n')}`,
+      );
+      return;
+    }
+
+    tileDirs = readyTiles;
   } else {
     tileDirs = findTileDirsWithEvals(changedFiles);
     if (tileDirs.length === 0) {
