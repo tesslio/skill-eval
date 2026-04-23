@@ -63,6 +63,7 @@ export async function generateAndDownloadScenarios(
 
   // 2. Poll until completed or timeout
   const deadline = Date.now() + timeoutMinutes * 60_000;
+  let completed = false;
 
   while (Date.now() < deadline) {
     await Bun.sleep(POLL_INTERVAL_MS);
@@ -97,6 +98,7 @@ export async function generateAndDownloadScenarios(
     }
 
     if (viewParsed.status === 'completed') {
+      completed = true;
       break;
     }
 
@@ -107,7 +109,7 @@ export async function generateAndDownloadScenarios(
     core.info(`Scenario ${generationId}: ${viewParsed.status ?? 'unknown'}... waiting`);
   }
 
-  if (Date.now() >= deadline) {
+  if (!completed) {
     return errorResult(`Scenario generation timed out after ${timeoutMinutes} minutes`);
   }
 
