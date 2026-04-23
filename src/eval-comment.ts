@@ -7,6 +7,15 @@ function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|>~]/g, '\\$&');
 }
 
+/** Sanitize text for use inside a markdown table cell. */
+function sanitizeTableCell(text: string): string {
+  return text
+    .replace(/\|/g, '\\|')
+    .replace(/\n/g, '<br>')
+    .replace(/@/g, '@<!-- -->')
+    .replace(/`/g, '\\`');
+}
+
 function deltaIndicator(delta: number): string {
   if (delta > 0) return `🔺 +${delta}%`;
   if (delta < 0) return `🔻 ${delta}%`;
@@ -48,7 +57,7 @@ export function formatEvalComment(results: EvalResult[], failOnRegression: boole
           body += '| Criterion | Score | Detail |\n';
           body += '|-----------|-------|--------|\n';
           for (const c of s.criteria) {
-            body += `| ${c.name} | ${c.score}/${c.maxScore} | ${c.reasoning} |\n`;
+            body += `| ${sanitizeTableCell(c.name)} | ${c.score}/${c.maxScore} | ${sanitizeTableCell(c.reasoning)} |\n`;
           }
           body += '\n';
         }

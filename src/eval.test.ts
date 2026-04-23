@@ -311,6 +311,30 @@ describe('formatEvalComment', () => {
     expect(body).not.toContain('regression');
   });
 
+  test('sanitizes pipes, newlines, and mentions in criterion table cells', async () => {
+    const { formatEvalComment } = await import('./eval-comment.ts');
+    const body = formatEvalComment(
+      [{
+        tilePath: '/tiles/t', runId: 'run-1', status: 'completed', overallScore: 60,
+        scenarios: [{
+          name: 'scenario1', baselineScore: 40, withContextScore: 60, delta: 20,
+          criteria: [{
+            name: 'test|name',
+            score: 15,
+            maxScore: 25,
+            reasoning: 'line1\nline2 @user `code`',
+          }],
+        }],
+      }],
+      false,
+    );
+    expect(body).not.toContain('| test|name |');
+    expect(body).toContain('test\\|name');
+    expect(body).toContain('<br>');
+    expect(body).toContain('@<!-- -->');
+    expect(body).toContain('\\`');
+  });
+
   test('shows error for failed eval', async () => {
     const { formatEvalComment } = await import('./eval-comment.ts');
     const body = formatEvalComment(
