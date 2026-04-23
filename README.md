@@ -131,9 +131,20 @@ This is useful for tiles that don't have checked-in scenarios, or when you want 
 
 When evals are enabled, the action walks up from each changed `SKILL.md` file to find the parent tile directory (a directory containing `tile.json`). If that tile directory also contains an `evals/` subdirectory with scenario files, the tile is included in the eval run. Tiles without an `evals/` directory are skipped.
 
-### Async polling
+### Timeouts and long-running jobs
 
-Eval runs are asynchronous. After triggering `tessl eval run`, the action polls the Tessl API every 30 seconds until the run completes or the timeout is reached. The default timeout is 45 minutes per tile, configurable via `eval-timeout`.
+Scenario generation and eval execution each apply the `eval-timeout` independently. With `eval-generate-scenarios` enabled, the total wall time can be up to **2x** the timeout value — for example, with the default 45 minutes, generation could take up to 45 minutes and eval execution another 45 minutes, for a possible total of ~90 minutes per tile.
+
+Scenario generation polls every 15 seconds; eval execution polls every 30 seconds. Plan your GitHub Actions [job timeout](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idtimeout-minutes) accordingly:
+
+```yaml
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120  # allow headroom for generation + eval
+```
+
+For tiles with pre-existing scenarios (no generation), the total time is just the eval timeout.
 
 ### Setting up the TESSL_API_KEY secret
 
