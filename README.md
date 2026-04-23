@@ -129,7 +129,7 @@ This is useful for tiles that don't have checked-in scenarios, or when you want 
 
 ### How eval detection works
 
-When evals are enabled, the action walks up from each changed `SKILL.md` file to find the parent tile directory (a directory containing `tile.json`). If that tile directory also contains an `evals/` subdirectory with scenario files, the tile is included in the eval run. Tiles without an `evals/` directory are skipped.
+When evals are enabled, the action walks up from each changed `SKILL.md` file to find the parent tile directory (a directory containing `tile.json`). The search checks up to **5 parent directories** — if your `SKILL.md` is nested deeper than that relative to `tile.json`, the tile won't be detected (a warning is logged). If that tile directory also contains an `evals/` subdirectory with scenario files, the tile is included in the eval run. Tiles without an `evals/` directory are skipped.
 
 ### Timeouts and long-running jobs
 

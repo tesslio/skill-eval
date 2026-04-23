@@ -1,3 +1,4 @@
+import * as core from '@actions/core';
 import { dirname, join } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 
@@ -5,7 +6,8 @@ const MAX_WALK_UP = 5;
 
 /**
  * Walk up from a file path to find the nearest directory containing tile.json.
- * Returns null if none found within MAX_WALK_UP levels.
+ * Returns null if none found within MAX_WALK_UP levels. Logs a warning when
+ * the limit is reached without finding a tile.
  */
 export function findTileDir(filePath: string): string | null {
   let dir = dirname(filePath);
@@ -17,6 +19,10 @@ export function findTileDir(filePath: string): string | null {
     if (parent === dir) break;
     dir = parent;
   }
+  core.warning(
+    `No tile.json found within ${MAX_WALK_UP} parent directories of ${filePath}. ` +
+    `If your tile is nested deeper, move SKILL.md closer to tile.json.`,
+  );
   return null;
 }
 
