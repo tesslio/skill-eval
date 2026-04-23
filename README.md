@@ -74,6 +74,8 @@ The eval feature runs `tessl eval run` against tiles that contain eval scenarios
 | `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
 | `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |
 | `eval-fail-threshold` | Minimum eval score (0-100) to pass. Set to `0` to never fail. | `0` |
+| `eval-generate-scenarios` | Generate fresh scenarios before running evals | `false` |
+| `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
 | `tessl-api-key` | Tessl API key. Pass via secrets. | (required when `eval` is `true`) |
 
 ### Usage with evals
@@ -102,6 +104,28 @@ jobs:
           eval-fail-threshold: 60
           tessl-api-key: ${{ secrets.TESSL_API_KEY }}
 ```
+
+### Generating scenarios on-the-fly
+
+Instead of relying on pre-existing scenarios in `evals/`, you can generate fresh scenarios from your tile before running evals:
+
+```yaml
+- uses: tesslio/skill-eval@main
+  with:
+    eval: true
+    eval-workspace: my-workspace
+    eval-generate-scenarios: true
+    eval-scenario-count: 3
+    tessl-api-key: ${{ secrets.TESSL_API_KEY }}
+```
+
+When `eval-generate-scenarios` is enabled, the action will:
+1. Find all tile directories (not just those with existing `evals/`)
+2. Run `tessl scenario generate` to create fresh scenarios for each tile
+3. Download the generated scenarios to the tile's `evals/` directory
+4. Run evals against the newly generated scenarios
+
+This is useful for tiles that don't have checked-in scenarios, or when you want to evaluate against fresh scenarios generated from the current tile state.
 
 ### How eval detection works
 
