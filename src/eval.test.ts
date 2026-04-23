@@ -379,23 +379,30 @@ describe('formatEvalComment', () => {
 describe('generateAndDownloadScenarios', () => {
   let originalSpawn: typeof Bun.spawn;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     originalSpawn = Bun.spawn;
+    // Use fast timings for tests
+    const { setTimings } = await import('./scenario-generate.ts');
+    setTimings(10, 10, 100); // 10ms poll, 10ms retry, 100ms retry timeout
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     // @ts-ignore restoring original
     Bun.spawn = originalSpawn;
+    // Restore real timings
+    const { setTimings } = await import('./scenario-generate.ts');
+    setTimings(30_000, 30_000, 15 * 60_000);
   });
 
-  test('returns error when generate command fails', async () => {
+  test('returns error when generate keeps failing and no in-progress found', async () => {
+    // All spawn calls return exit 1 — generate fails, list also fails
     // @ts-expect-error mock assignment
-    Bun.spawn = makeMockSpawn('', 'not authenticated', 1);
+    Bun.spawn = makeMockSpawn('', 'server error', 1);
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
     const result = await generateAndDownloadScenarios('/tile', 3, 1);
     expect(result.success).toBe(false);
-    expect(result.error).toContain('not authenticated');
+    expect(result.error).toContain('retries');
   });
 
   test('returns error when generate output has no id', async () => {

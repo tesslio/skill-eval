@@ -2,13 +2,130 @@ import * as core from '@actions/core';
 import { join } from 'node:path';
 import { extractJson } from './skill-review.ts';
 
-const POLL_INTERVAL_MS = 15_000;
+export let POLL_INTERVAL_MS = 30_000;
+export let GENERATE_RETRY_INTERVAL_MS = 30_000;
+export let GENERATE_RETRY_TIMEOUT_MS = 15 * 60_000;
+
+/** Override intervals for testing. */
+export function setTimings(poll: number, retryInterval: number, retryTimeout: number): void {
+  POLL_INTERVAL_MS = poll;
+  GENERATE_RETRY_INTERVAL_MS = retryInterval;
+  GENERATE_RETRY_TIMEOUT_MS = retryTimeout;
+}
 
 export interface ScenarioGenerateResult {
   tilePath: string;
   generationId: string;
   success: boolean;
   error?: string;
+}
+
+/**
+ * Extract the tile name from a tile path (last directory component).
+ * e.g. "discovery" from "discovery" or "tiles/discovery" from "tiles/discovery"
+ */
+function tileNameFromPath(tilePath: string): string {
+  return tilePath.replace(/\/+$/, '').split('/').pop() ?? tilePath;
+}
+
+/**
+ * Check `tessl scenario list --mine --json` for an in-progress generation
+ * that matches this tile. Returns the generation ID if found, null otherwise.
+ */
+async function findInProgressGeneration(tileName: string): Promise<string | null> {
+  const proc = Bun.spawn(
+    ['tessl', 'scenario', 'list', '--mine', '--json'],
+    { stdout: 'pipe', stderr: 'pipe' },
+  );
+
+  const stdout = await new Response(proc.stdout).text();
+  await proc.exited;
+
+  // The list response is JSON:API: { data: [{ id, attributes: { status, source } }] }
+  const jsonStr = extractJson(stdout);
+  if (!jsonStr) return null;
+
+  let parsed: { data?: Array<{ id: string; attributes?: { status?: string; source?: { uploadsS3Key?: string } } }> };
+  try {
+    parsed = JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+
+  const runs = parsed.data ?? [];
+  for (const run of runs) {
+    const attrs = run.attributes;
+    if (attrs?.status !== 'in_progress') continue;
+
+    // Match by checking if the S3 key contains the tile name
+    const s3Key = attrs.source?.uploadsS3Key ?? '';
+    if (s3Key.includes(`-${tileName}.tar.gz`)) {
+      return run.id;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Attempt to start scenario generation. If the server returns an error
+ * (e.g. 500 due to a concurrent generation), check for an in-progress
+ * generation for this tile and adopt it. Retries for up to 15 minutes.
+ */
+async function startOrAdoptGeneration(
+  tilePath: string,
+  count: number,
+): Promise<{ generationId: string } | { error: string }> {
+  const tileName = tileNameFromPath(tilePath);
+  const deadline = Date.now() + GENERATE_RETRY_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    // Try to start a new generation
+    const genProc = Bun.spawn(
+      ['tessl', 'scenario', 'generate', tilePath, '-n', String(count), '--json'],
+      { stdout: 'pipe', stderr: 'pipe' },
+    );
+
+    const [genStdout, genStderr] = await Promise.all([
+      new Response(genProc.stdout).text(),
+      new Response(genProc.stderr).text(),
+    ]);
+
+    const genExit = await genProc.exited;
+
+    if (genExit === 0) {
+      // Success — parse the generation ID
+      const genJson = extractJson(genStdout);
+      if (!genJson) return { error: 'Could not parse tessl scenario generate output' };
+
+      let genParsed: Record<string, unknown>;
+      try {
+        genParsed = JSON.parse(genJson);
+      } catch {
+        return { error: 'Invalid JSON from tessl scenario generate' };
+      }
+
+      const generationId = (genParsed.generationId ?? genParsed.id) as string | undefined;
+      if (!generationId) return { error: 'No generation id returned from tessl scenario generate' };
+
+      return { generationId };
+    }
+
+    // Generate failed — check if there's an in-progress generation we can adopt
+    core.info(`tessl scenario generate failed (exit ${genExit}), checking for in-progress generation...`);
+
+    const existingId = await findInProgressGeneration(tileName);
+    if (existingId) {
+      core.info(`Found in-progress generation ${existingId} for tile "${tileName}" — adopting it`);
+      return { generationId: existingId };
+    }
+
+    // No in-progress generation found — wait and retry
+    core.info(`No in-progress generation found for "${tileName}". Retrying in ${GENERATE_RETRY_INTERVAL_MS / 1000}s...`);
+    await Bun.sleep(GENERATE_RETRY_INTERVAL_MS);
+  }
+
+  return { error: `Could not start scenario generation after ${GENERATE_RETRY_TIMEOUT_MS / 60_000} minutes of retries` };
 }
 
 /**
@@ -26,39 +143,14 @@ export async function generateAndDownloadScenarios(
     error,
   });
 
-  // 1. Start scenario generation (tile path, not SKILL.md)
-  const genProc = Bun.spawn(
-    ['tessl', 'scenario', 'generate', tilePath, '-n', String(count), '--json'],
-    { stdout: 'pipe', stderr: 'pipe' },
-  );
-
-  const [genStdout, genStderr] = await Promise.all([
-    new Response(genProc.stdout).text(),
-    new Response(genProc.stderr).text(),
-  ]);
-
-  const genExit = await genProc.exited;
-  if (genExit !== 0) {
-    return errorResult(`tessl scenario generate failed (exit ${genExit}): ${genStderr}`);
+  // 1. Start generation (or adopt an existing in-progress one)
+  const startResult = await startOrAdoptGeneration(tilePath, count);
+  if ('error' in startResult) {
+    return errorResult(startResult.error);
   }
 
-  const genJson = extractJson(genStdout);
-  if (!genJson) {
-    return errorResult('Could not parse tessl scenario generate output');
-  }
-
-  let genParsed: Record<string, unknown>;
-  try {
-    genParsed = JSON.parse(genJson);
-  } catch {
-    return errorResult('Invalid JSON from tessl scenario generate');
-  }
-
-  const generationId = (genParsed.generationId ?? genParsed.id) as string | undefined;
-  if (!generationId) {
-    return errorResult('No generation id returned from tessl scenario generate');
-  }
-  core.info(`Scenario generation started: ${generationId}`);
+  const { generationId } = startResult;
+  core.info(`Scenario generation active: ${generationId}`);
 
   // 2. Poll until completed or timeout
   const deadline = Date.now() + timeoutMinutes * 60_000;
@@ -96,7 +188,6 @@ export async function generateAndDownloadScenarios(
       continue;
     }
 
-    // JSON:API format: status is at data.attributes.status
     const status = viewParsed.data?.attributes?.status ?? viewParsed.status;
 
     if (status === 'completed') {
