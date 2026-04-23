@@ -111,8 +111,10 @@ async function startOrAdoptGeneration(
       return { generationId };
     }
 
-    // Generate failed — check if there's an in-progress generation we can adopt
-    core.info(`tessl scenario generate failed (exit ${genExit}), checking for in-progress generation...`);
+    // Generate failed — log the error, then check for an in-progress generation to adopt
+    const stderrTrimmed = genStderr.trim().replace(/\n/g, ' | ');
+    core.info(`tessl scenario generate failed (exit ${genExit}): ${stderrTrimmed}`);
+    core.info(`stdout was: ${genStdout.trim().slice(0, 200) || '(empty)'}`);
 
     const existingId = await findInProgressGeneration(tileName);
     if (existingId) {
