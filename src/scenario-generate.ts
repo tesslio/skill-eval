@@ -47,18 +47,17 @@ export async function generateAndDownloadScenarios(
     return errorResult('Could not parse tessl scenario generate output');
   }
 
-  let genParsed: { id?: string };
+  let genParsed: Record<string, unknown>;
   try {
     genParsed = JSON.parse(genJson);
   } catch {
     return errorResult('Invalid JSON from tessl scenario generate');
   }
 
-  if (!genParsed.id) {
+  const generationId = (genParsed.generationId ?? genParsed.id) as string | undefined;
+  if (!generationId) {
     return errorResult('No generation id returned from tessl scenario generate');
   }
-
-  const generationId = genParsed.id;
   core.info(`Scenario generation started: ${generationId}`);
 
   // 2. Poll until completed or timeout
@@ -89,7 +88,7 @@ export async function generateAndDownloadScenarios(
       continue;
     }
 
-    let viewParsed: { status?: string };
+    let viewParsed: { data?: { attributes?: { status?: string } }; status?: string };
     try {
       viewParsed = JSON.parse(viewJson);
     } catch {
@@ -97,16 +96,19 @@ export async function generateAndDownloadScenarios(
       continue;
     }
 
-    if (viewParsed.status === 'completed') {
+    // JSON:API format: status is at data.attributes.status
+    const status = viewParsed.data?.attributes?.status ?? viewParsed.status;
+
+    if (status === 'completed') {
       completed = true;
       break;
     }
 
-    if (viewParsed.status === 'failed') {
+    if (status === 'failed') {
       return errorResult(`Scenario generation ${generationId} failed`);
     }
 
-    core.info(`Scenario ${generationId}: ${viewParsed.status ?? 'unknown'}... waiting`);
+    core.info(`Scenario ${generationId}: ${status ?? 'unknown'}... waiting`);
   }
 
   if (!completed) {
