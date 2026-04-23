@@ -21,8 +21,8 @@ async function main(): Promise<void> {
     return;
   }
 
-  if (!process.env.TESSL_API_KEY) {
-    core.setFailed('TESSL_API_KEY environment variable is required');
+  if (!process.env.TESSL_TOKEN) {
+    core.setFailed('tessl-token is required. Pass your Tessl API token via secrets.');
     return;
   }
 

@@ -28,13 +28,15 @@ inputs:
   eval-scenario-count:
     description: 'Number of scenarios to generate per tile'
     default: '3'
-  tessl-api-key:
-    description: 'Tessl API key. Pass via secrets.'
+  tessl-token:
+    description: 'Tessl API token for authentication. Pass via secrets.'
     required: true
 runs:
   using: 'composite'
   steps:
     - uses: tesslio/setup-tessl@v1
+      with:
+        token: ${{ inputs.tessl-token }}
     - uses: oven-sh/setup-bun@v2
     - run: bun install --production --frozen-lockfile
       shell: bash
@@ -51,4 +53,4 @@ runs:
         INPUT_EVAL_GENERATE_SCENARIOS: ${{ inputs.eval-generate-scenarios }}
         INPUT_EVAL_SCENARIO_COUNT: ${{ inputs.eval-scenario-count }}
         GITHUB_TOKEN: ${{ github.token }}
-        TESSL_API_KEY: ${{ inputs.tessl-api-key }}
+        TESSL_TOKEN: ${{ inputs.tessl-token }}
