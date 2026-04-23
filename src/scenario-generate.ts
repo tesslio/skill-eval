@@ -15,7 +15,6 @@ export interface ScenarioGenerateResult {
  * Generate eval scenarios for a tile, poll until complete, then download them.
  */
 export async function generateAndDownloadScenarios(
-  skillPath: string,
   tilePath: string,
   count: number,
   timeoutMinutes: number,
@@ -27,9 +26,9 @@ export async function generateAndDownloadScenarios(
     error,
   });
 
-  // 1. Start scenario generation (pass the SKILL.md path, not the tile dir)
+  // 1. Start scenario generation (tile path, not SKILL.md)
   const genProc = Bun.spawn(
-    ['tessl', 'scenario', 'generate', skillPath, '-n', String(count), '--json'],
+    ['tessl', 'scenario', 'generate', tilePath, '-n', String(count), '--json'],
     { stdout: 'pipe', stderr: 'pipe' },
   );
 

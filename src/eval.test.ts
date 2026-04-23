@@ -393,7 +393,7 @@ describe('generateAndDownloadScenarios', () => {
     Bun.spawn = makeMockSpawn('', 'not authenticated', 1);
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
-    const result = await generateAndDownloadScenarios('/tile/SKILL.md', '/tile', 3, 1);
+    const result = await generateAndDownloadScenarios('/tile', 3, 1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('not authenticated');
   });
@@ -403,7 +403,7 @@ describe('generateAndDownloadScenarios', () => {
     Bun.spawn = makeMockSpawn('{"status": "pending"}', '', 0);
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
-    const result = await generateAndDownloadScenarios('/tile/SKILL.md', '/tile', 3, 1);
+    const result = await generateAndDownloadScenarios('/tile', 3, 1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('id');
   });
@@ -413,7 +413,7 @@ describe('generateAndDownloadScenarios', () => {
     Bun.spawn = makeMockSpawn('no json', '', 0);
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
-    const result = await generateAndDownloadScenarios('/tile/SKILL.md', '/tile', 3, 1);
+    const result = await generateAndDownloadScenarios('/tile', 3, 1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('parse');
   });
