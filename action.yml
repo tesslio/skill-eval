@@ -11,7 +11,7 @@ inputs:
     description: 'Whether to post results as a PR comment'
     default: 'true'
   fail-threshold:
-    description: 'Minimum average review score (0-100) to pass. Set to 0 to never fail.'
+    description: 'Minimum review score (0-100) required for each SKILL.md to pass. Set to 0 to never fail.'
     default: '0'
   eval:
     description: 'Run evals against tiles with scenarios (requires TESSL_API_KEY)'
