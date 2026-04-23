@@ -1,5 +1,5 @@
-name: 'Tessl Skill Review'
-description: 'Automatically review SKILL.md files changed in a pull request and post results as a PR comment'
+name: 'Tessl Skill Review & Eval'
+description: 'Review SKILL.md files in a PR and optionally run evals against tiles with scenarios'
 branding:
   icon: check-circle
   color: purple
@@ -11,8 +11,26 @@ inputs:
     description: 'Whether to post results as a PR comment'
     default: 'true'
   fail-threshold:
-    description: 'Minimum average score (0-100) to pass the check. Set to 0 to never fail.'
+    description: 'Minimum average review score (0-100) to pass. Set to 0 to never fail.'
     default: '0'
+  eval:
+    description: 'Run evals against tiles with scenarios (requires TESSL_API_KEY)'
+    default: 'false'
+  eval-workspace:
+    description: 'Tessl workspace name for eval runs'
+    default: ''
+  eval-agent:
+    description: 'Agent:model pair for evals (e.g. claude:claude-sonnet-4-6)'
+    default: 'claude:claude-sonnet-4-6'
+  eval-timeout:
+    description: 'Max minutes to wait for each eval run to complete'
+    default: '45'
+  eval-fail-threshold:
+    description: 'Minimum eval score (0-100) to pass. Set to 0 to never fail.'
+    default: '0'
+  tessl-api-key:
+    description: 'Tessl API key (required when eval is true). Pass via secrets.'
+    default: ''
 runs:
   using: 'composite'
   steps:
@@ -27,4 +45,10 @@ runs:
         INPUT_PATH: ${{ inputs.path }}
         INPUT_COMMENT: ${{ inputs.comment }}
         INPUT_FAIL_THRESHOLD: ${{ inputs.fail-threshold }}
+        INPUT_EVAL: ${{ inputs.eval }}
+        INPUT_EVAL_WORKSPACE: ${{ inputs.eval-workspace }}
+        INPUT_EVAL_AGENT: ${{ inputs.eval-agent }}
+        INPUT_EVAL_TIMEOUT: ${{ inputs.eval-timeout }}
+        INPUT_EVAL_FAIL_THRESHOLD: ${{ inputs.eval-fail-threshold }}
         GITHUB_TOKEN: ${{ github.token }}
+        TESSL_API_KEY: ${{ inputs.tessl-api-key }}
