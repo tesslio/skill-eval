@@ -33,50 +33,57 @@ async function main(): Promise<void> {
     `Found ${changedFiles.length} changed SKILL.md file(s): ${changedFiles.join(', ')}`,
   );
 
-  // 2. Find tile directories
-  let tileDirs: string[];
+  // 2. Find all tile directories
+  const allTileDirs = findTileDirs(changedFiles);
+  if (allTileDirs.length === 0) {
+    console.log('No tile directories found. Skipping eval.');
+    return;
+  }
 
-  if (generateScenarios) {
-    // When generating scenarios, find all tiles (don't require existing evals/)
-    tileDirs = findTileDirs(changedFiles);
-    if (tileDirs.length === 0) {
-      console.log('No tile directories found. Skipping eval.');
-      return;
-    }
+  // 3. Split into tiles with existing evals and tiles that need generation
+  const tilesWithEvals = findTileDirsWithEvals(changedFiles);
+  const tilesWithEvalsSet = new Set(tilesWithEvals);
+  const tilesNeedingGeneration = allTileDirs.filter((d) => !tilesWithEvalsSet.has(d));
 
-    console.log(`Found ${tileDirs.length} tile(s): ${tileDirs.join(', ')}`);
+  if (tilesWithEvals.length > 0) {
+    console.log(`Found ${tilesWithEvals.length} tile(s) with existing evals: ${tilesWithEvals.join(', ')}`);
+  }
 
-    // 3. Generate scenarios for each tile (fail fast — generation is required)
-    const readyTiles: string[] = [];
-    const genFailures: string[] = [];
+  if (tilesNeedingGeneration.length > 0) {
+    if (!generateScenarios) {
+      console.log(
+        `${tilesNeedingGeneration.length} tile(s) have no evals/ directory: ${tilesNeedingGeneration.join(', ')}. ` +
+        `Set eval-generate-scenarios: true to auto-generate scenarios for these tiles.`,
+      );
+    } else {
+      console.log(`Generating scenarios for ${tilesNeedingGeneration.length} tile(s) without evals/...`);
 
-    for (const tileDir of tileDirs) {
-      console.log(`Generating ${scenarioCount} scenario(s) for ${tileDir}...`);
-      const genResult = await generateAndDownloadScenarios(tileDir, scenarioCount, evalTimeout);
-      if (!genResult.success) {
-        genFailures.push(`  ${tileDir}: ${genResult.error}`);
-      } else {
-        console.log(`  Scenarios ready (generation ${genResult.generationId})`);
-        readyTiles.push(tileDir);
+      const genFailures: string[] = [];
+
+      for (const tileDir of tilesNeedingGeneration) {
+        console.log(`  Generating ${scenarioCount} scenario(s) for ${tileDir}...`);
+        const genResult = await generateAndDownloadScenarios(tileDir, scenarioCount, evalTimeout);
+        if (!genResult.success) {
+          genFailures.push(`  ${tileDir}: ${genResult.error}`);
+        } else {
+          console.log(`    Scenarios ready (generation ${genResult.generationId})`);
+          tilesWithEvals.push(tileDir);
+        }
+      }
+
+      if (genFailures.length > 0) {
+        core.setFailed(
+          `Scenario generation failed for ${genFailures.length} tile(s):\n${genFailures.join('\n')}`,
+        );
+        return;
       }
     }
+  }
 
-    if (genFailures.length > 0) {
-      core.setFailed(
-        `Scenario generation failed for ${genFailures.length} tile(s):\n${genFailures.join('\n')}`,
-      );
-      return;
-    }
-
-    tileDirs = readyTiles;
-  } else {
-    tileDirs = findTileDirsWithEvals(changedFiles);
-    if (tileDirs.length === 0) {
-      console.log('No tile directories with evals/ found. Skipping eval.');
-      return;
-    }
-
-    console.log(`Found ${tileDirs.length} tile(s) with evals: ${tileDirs.join(', ')}`);
+  const tileDirs = tilesWithEvals;
+  if (tileDirs.length === 0) {
+    console.log('No tiles with eval scenarios to run. Skipping eval.');
+    return;
   }
 
   // 4. Run evals

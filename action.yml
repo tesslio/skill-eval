@@ -34,7 +34,7 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: tesslio/setup-tessl@v1
+    - uses: tesslio/setup-tessl@v2
       with:
         token: ${{ inputs.tessl-token }}
     - uses: oven-sh/setup-bun@v2
