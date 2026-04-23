@@ -2,7 +2,7 @@ import * as core from '@actions/core';
 import { getChangedSkillFiles } from './changed-files.ts';
 import { postOrUpdateEvalComment } from './eval-comment.ts';
 import { runEval } from './eval-run.ts';
-import { findTileDirs, findTileDirsWithEvals } from './find-tiles.ts';
+import { findTileDir, findTileDirs, findTileDirsWithEvals } from './find-tiles.ts';
 import type { EvalResult } from './eval-types.ts';
 import { generateAndDownloadScenarios } from './scenario-generate.ts';
 
@@ -58,16 +58,27 @@ async function main(): Promise<void> {
     } else {
       console.log(`Generating scenarios for ${tilesNeedingGeneration.length} tile(s) without evals/...`);
 
-      const genFailures: string[] = [];
+      // Find the changed SKILL.md files that belong to tiles needing generation
+      const skillsToGenerate = changedFiles.filter((f) => {
+        const td = findTileDir(f);
+        return td !== null && tilesNeedingGeneration.includes(td);
+      });
 
-      for (const tileDir of tilesNeedingGeneration) {
-        console.log(`  Generating ${scenarioCount} scenario(s) for ${tileDir}...`);
-        const genResult = await generateAndDownloadScenarios(tileDir, scenarioCount, evalTimeout);
+      const genFailures: string[] = [];
+      const generatedTiles = new Set<string>();
+
+      for (const skillPath of skillsToGenerate) {
+        const tileDir = findTileDir(skillPath)!;
+        console.log(`  Generating ${scenarioCount} scenario(s) for ${skillPath}...`);
+        const genResult = await generateAndDownloadScenarios(skillPath, tileDir, scenarioCount, evalTimeout);
         if (!genResult.success) {
-          genFailures.push(`  ${tileDir}: ${genResult.error}`);
+          genFailures.push(`  ${skillPath}: ${genResult.error}`);
         } else {
           console.log(`    Scenarios ready (generation ${genResult.generationId})`);
-          tilesWithEvals.push(tileDir);
+          if (!generatedTiles.has(tileDir)) {
+            generatedTiles.add(tileDir);
+            tilesWithEvals.push(tileDir);
+          }
         }
       }
 
