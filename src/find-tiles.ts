@@ -1,5 +1,5 @@
 import { dirname, join } from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 
 const MAX_WALK_UP = 5;
 
@@ -30,7 +30,8 @@ export function findTileDirsWithEvals(filePaths: string[]): string[] {
 
   for (const filePath of filePaths) {
     const tileDir = findTileDir(filePath);
-    if (tileDir && !seen.has(tileDir) && existsSync(join(tileDir, 'evals'))) {
+    const evalsPath = tileDir ? join(tileDir, 'evals') : '';
+    if (tileDir && !seen.has(tileDir) && existsSync(evalsPath) && statSync(evalsPath).isDirectory()) {
       seen.add(tileDir);
       result.push(tileDir);
     }
