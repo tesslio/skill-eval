@@ -35,19 +35,7 @@ That's it. Any PR that modifies a `SKILL.md` file will get an automated review c
 |---|---|---|
 | `path` | Root path to search for SKILL.md files | `.` |
 | `comment` | Whether to post results as a PR comment | `true` |
-| `fail-threshold` | Minimum score (0-100) to pass. Set to `0` to never fail. | `0` |
 
-### Setting a quality gate
-
-To enforce a minimum skill quality score, set `fail-threshold`:
-
-```yaml
-- uses: tesslio/skill-eval@main
-  with:
-    fail-threshold: 70
-```
-
-PRs with any skill scoring below 70% will fail the check.
 
 ## How it works
 
@@ -55,7 +43,6 @@ PRs with any skill scoring below 70% will fail the check.
 2. Installs the [Tessl CLI](https://tessl.io)
 3. Runs `tessl skill review` on each changed skill
 4. Posts (or updates) a review comment on the PR with scores and detailed feedback
-5. Optionally fails the check if any score is below the threshold
 
 ## Comment behavior
 
@@ -76,7 +63,7 @@ The eval feature runs `tessl eval run` against tiles that contain eval scenarios
 | `eval-fail-on-regression` | Fail the check if any scenario scores worse with context than baseline | `true` |
 | `eval-generate-scenarios` | Generate fresh scenarios before running evals | `false` |
 | `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
-| `tessl-api-key` | Tessl API key. Pass via secrets. | (required when `eval` is `true`) |
+| `tessl-token` | Tessl API key. Pass via secrets. | (required when `eval` is `true`) |
 
 ### Usage with evals
 
@@ -96,7 +83,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: tesslio/skill-eval@main
         with:
-          fail-threshold: 70
           eval: true
           eval-workspace: my-workspace
           eval-agent: claude:claude-sonnet-4-6
