@@ -45,43 +45,43 @@ mock.module('@actions/github', () => ({
 const { getChangedSkillFiles } = await import('./changed-files.ts');
 const { runSkillReview, extractJson } = await import('./skill-review.ts');
 const { postOrUpdateComment } = await import('./comment.ts');
-const { parseThreshold } = await import('./main.ts');
+const { parsePositiveInt } = await import('./main.ts');
 
 // ---------------------------------------------------------------------------
-// 1. parseThreshold
+// 1. parsePositiveInt
 // ---------------------------------------------------------------------------
 
-describe('parseThreshold', () => {
-  test('returns 0 for undefined', () => {
-    expect(parseThreshold(undefined)).toBe(0);
+describe('parsePositiveInt', () => {
+  test('returns default for undefined', () => {
+    expect(parsePositiveInt(undefined, 'eval-timeout', 45)).toBe(45);
   });
 
-  test('returns 0 for "0"', () => {
-    expect(parseThreshold('0')).toBe(0);
+  test('returns default for empty string', () => {
+    expect(parsePositiveInt('', 'eval-timeout', 45)).toBe(45);
   });
 
-  test('returns 50 for "50"', () => {
-    expect(parseThreshold('50')).toBe(50);
+  test('returns parsed value for valid integer', () => {
+    expect(parsePositiveInt('10', 'eval-timeout', 45)).toBe(10);
   });
 
-  test('returns 100 for "100"', () => {
-    expect(parseThreshold('100')).toBe(100);
+  test('throws for non-numeric string', () => {
+    expect(() => parsePositiveInt('abc', 'eval-timeout', 45)).toThrow('Invalid eval-timeout');
   });
 
-  test('throws for -1', () => {
-    expect(() => parseThreshold('-1')).toThrow('Invalid fail-threshold');
+  test('throws for zero', () => {
+    expect(() => parsePositiveInt('0', 'eval-scenario-count', 3)).toThrow('Invalid eval-scenario-count');
   });
 
-  test('throws for 101', () => {
-    expect(() => parseThreshold('101')).toThrow('Invalid fail-threshold');
+  test('throws for negative number', () => {
+    expect(() => parsePositiveInt('-5', 'eval-timeout', 45)).toThrow('Invalid eval-timeout');
   });
 
-  test('throws for NaN string', () => {
-    expect(() => parseThreshold('NaN')).toThrow('Invalid fail-threshold');
+  test('throws for float', () => {
+    expect(() => parsePositiveInt('3.5', 'eval-scenario-count', 3)).toThrow('Invalid eval-scenario-count');
   });
 
-  test('throws for "abc"', () => {
-    expect(() => parseThreshold('abc')).toThrow('Invalid fail-threshold');
+  test('throws for NaN', () => {
+    expect(() => parsePositiveInt('NaN', 'eval-timeout', 45)).toThrow('Invalid eval-timeout');
   });
 });
 

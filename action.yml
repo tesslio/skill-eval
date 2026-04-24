@@ -1,5 +1,5 @@
-name: 'Tessl Skill Review'
-description: 'Automatically review SKILL.md files changed in a pull request and post results as a PR comment'
+name: 'Tessl Skill Eval'
+description: 'Run Tessl evals against tiles with scenarios when SKILL.md files change in a PR'
 branding:
   icon: check-circle
   color: purple
@@ -10,13 +10,33 @@ inputs:
   comment:
     description: 'Whether to post results as a PR comment'
     default: 'true'
-  fail-threshold:
-    description: 'Minimum average score (0-100) to pass the check. Set to 0 to never fail.'
-    default: '0'
+  eval-workspace:
+    description: 'Tessl workspace name. Optional when tiles have workspace set in tile.json.'
+    default: ''
+  eval-agent:
+    description: 'Agent:model pair for evals (e.g. claude:claude-sonnet-4-6)'
+    default: 'claude:claude-sonnet-4-6'
+  eval-timeout:
+    description: 'Max minutes to wait for each eval run to complete'
+    default: '45'
+  eval-fail-on-regression:
+    description: 'Fail the check if any scenario scores worse with context than baseline'
+    default: 'true'
+  eval-generate-scenarios:
+    description: 'Generate fresh scenarios before running evals'
+    default: 'false'
+  eval-scenario-count:
+    description: 'Number of scenarios to generate per tile'
+    default: '3'
+  tessl-token:
+    description: 'Tessl API token for authentication. Pass via secrets.'
+    required: true
 runs:
   using: 'composite'
   steps:
-    - uses: tesslio/setup-tessl@v1
+    - uses: tesslio/setup-tessl@v2
+      with:
+        token: ${{ inputs.tessl-token }}
     - uses: oven-sh/setup-bun@v2
     - run: bun install --production --frozen-lockfile
       shell: bash
@@ -26,5 +46,11 @@ runs:
       env:
         INPUT_PATH: ${{ inputs.path }}
         INPUT_COMMENT: ${{ inputs.comment }}
-        INPUT_FAIL_THRESHOLD: ${{ inputs.fail-threshold }}
+        INPUT_EVAL_WORKSPACE: ${{ inputs.eval-workspace }}
+        INPUT_EVAL_AGENT: ${{ inputs.eval-agent }}
+        INPUT_EVAL_TIMEOUT: ${{ inputs.eval-timeout }}
+        INPUT_EVAL_FAIL_ON_REGRESSION: ${{ inputs.eval-fail-on-regression }}
+        INPUT_EVAL_GENERATE_SCENARIOS: ${{ inputs.eval-generate-scenarios }}
+        INPUT_EVAL_SCENARIO_COUNT: ${{ inputs.eval-scenario-count }}
         GITHUB_TOKEN: ${{ github.token }}
+        TESSL_TOKEN: ${{ inputs.tessl-token }}

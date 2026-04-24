@@ -1,5 +1,5 @@
 {
-  "name": "tessl-skill-review-action",
+  "name": "tessl-skill-eval-action",
   "private": true,
   "type": "module",
   "module": "src/main.ts",
