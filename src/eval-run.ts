@@ -178,7 +178,9 @@ export async function runEval(
     return errorResult('Invalid JSON from tessl eval run');
   }
 
-  // The CLI returns [{ evalRunId }] — extractJson grabs the first object
+  // The CLI returns [{ evalRunId }] (an array). extractJson finds the first '{',
+  // which skips the outer '[' and grabs the first object. This works for single-agent
+  // runs but would only return the first entry if multiple agents were specified.
   const runId = (startParsed.evalRunId ?? startParsed.id) as string | undefined;
   if (!runId) {
     return errorResult('No run id returned from tessl eval run');
