@@ -86,15 +86,17 @@ async function main(): Promise<void> {
     return;
   }
 
-  // 4. Run evals
-  const evalResults: EvalResult[] = [];
-  for (const tileDir of tileDirs) {
-    console.log(`Running eval for ${tileDir}...`);
-    const result = await runEval(tileDir, evalWorkspace, evalAgent, evalTimeout);
-    const status = result.error ? `ERROR: ${result.error}` : `score: ${result.overallScore}%`;
-    console.log(`  ${tileDir}: ${result.status} (${status})`);
-    evalResults.push(result);
-  }
+  // 4. Run evals (concurrently — each is mostly polling, not CPU-bound)
+  console.log(`Running evals for ${tileDirs.length} tile(s) concurrently...`);
+  const evalResults = await Promise.all(
+    tileDirs.map(async (tileDir) => {
+      console.log(`  Starting eval for ${tileDir}...`);
+      const result = await runEval(tileDir, evalWorkspace, evalAgent, evalTimeout);
+      const status = result.error ? `ERROR: ${result.error}` : `score: ${result.overallScore}%`;
+      console.log(`  ${tileDir}: ${result.status} (${status})`);
+      return result;
+    }),
+  );
 
   // 5. Post eval PR comment
   if (shouldComment) {
