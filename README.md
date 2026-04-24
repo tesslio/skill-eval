@@ -1,81 +1,23 @@
-# Tessl Skill Review & Eval Action
+# Tessl Skill Eval Action
 
-A GitHub Action that automatically reviews `SKILL.md` files changed in a pull request and posts the results as a PR comment. Optionally runs evals against tiles with eval scenarios to measure real agent performance.
+A GitHub Action that runs Tessl evals against tiles when `SKILL.md` files change in a pull request, and posts the results as a PR comment with per-scenario scoring.
 
-**Skill review requires no authentication.** It runs `tessl skill review` locally -- no Tessl account or API token needed. The only token used is the GitHub-provided `GITHUB_TOKEN` for posting PR comments.
-
-**Evals are opt-in** and require a `TESSL_API_KEY` to run `tessl eval run` against your workspace.
+Requires a `TESSL_TOKEN` to authenticate with the Tessl API. The GitHub-provided `GITHUB_TOKEN` is used for posting PR comments.
 
 ## Usage
 
-Add this workflow to your repository at `.github/workflows/skill-review.yml`:
+Add this workflow to your repository at `.github/workflows/skill-eval.yml`:
 
 ```yaml
-name: Tessl Skill Review
-on:
-  pull_request:
-    paths: ['**/SKILL.md']
-
-jobs:
-  review:
-    runs-on: ubuntu-latest
-    permissions:
-      pull-requests: write
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: tesslio/skill-eval@main
-```
-
-That's it. Any PR that modifies a `SKILL.md` file will get an automated review comment.
-
-## Inputs
-
-| Input | Description | Default |
-|---|---|---|
-| `path` | Root path to search for SKILL.md files | `.` |
-| `comment` | Whether to post results as a PR comment | `true` |
-
-
-## How it works
-
-1. Detects which `SKILL.md` files were changed in the PR
-2. Installs the [Tessl CLI](https://tessl.io)
-3. Runs `tessl skill review` on each changed skill
-4. Posts (or updates) a review comment on the PR with scores and detailed feedback
-
-## Comment behavior
-
-The action posts a single comment per PR. On subsequent pushes, it updates the existing comment rather than creating a new one.
-
-## Eval (opt-in)
-
-The eval feature runs `tessl eval run` against tiles that contain eval scenarios, polls for async results, and posts a separate PR comment with detailed scoring. This lets you measure real agent performance against your skills as part of your CI pipeline.
-
-### Eval inputs
-
-| Input | Description | Default |
-|---|---|---|
-| `eval` | Enable eval runs against tiles with scenarios (requires `TESSL_API_KEY`) | `false` |
-| `eval-workspace` | Tessl workspace name for eval runs | (required when `eval` is `true`) |
-| `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
-| `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |
-| `eval-fail-on-regression` | Fail the check if any scenario scores worse with context than baseline | `true` |
-| `eval-generate-scenarios` | Generate fresh scenarios before running evals | `false` |
-| `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
-| `tessl-token` | Tessl API key. Pass via secrets. | (required when `eval` is `true`) |
-
-### Usage with evals
-
-```yaml
-name: Tessl Skill Review + Eval
+name: Tessl Skill Eval
 on:
   pull_request:
     paths: ['**/SKILL.md', '**/evals/**']
 
 jobs:
-  review:
+  eval:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     permissions:
       pull-requests: write
       contents: read
@@ -83,13 +25,36 @@ jobs:
       - uses: actions/checkout@v4
       - uses: tesslio/skill-eval@main
         with:
-          eval: true
-          eval-workspace: my-workspace
-          eval-agent: claude:claude-sonnet-4-6
-          eval-timeout: 45
-          eval-fail-on-regression: true
-          tessl-api-key: ${{ secrets.TESSL_API_KEY }}
+          tessl-token: ${{ secrets.TESSL_TOKEN }}
 ```
+
+Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigger an eval run and post results as a PR comment.
+
+## Inputs
+
+| Input | Description | Default |
+|---|---|---|
+| `path` | Root path to search for SKILL.md files | `.` |
+| `comment` | Whether to post results as a PR comment | `true` |
+| `eval-workspace` | Tessl workspace name. Optional when tiles set workspace in `tile.json`. | `''` |
+| `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
+| `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |
+| `eval-fail-on-regression` | Fail the check if any scenario scores worse with context than baseline | `true` |
+| `eval-generate-scenarios` | Generate fresh scenarios for tiles without `evals/` | `false` |
+| `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
+| `tessl-token` | Tessl API token. Pass via secrets. | **(required)** |
+
+## How it works
+
+1. Detects which `SKILL.md` files were changed in the PR
+2. Installs the [Tessl CLI](https://tessl.io) and authenticates with your token
+3. Finds parent tile directories (containing `tile.json`) with eval scenarios
+4. Runs `tessl eval run` for each tile and polls for results
+5. Posts (or updates) an eval comment on the PR with per-scenario scores
+
+## Comment behavior
+
+The action posts a single eval comment per PR. On subsequent pushes, it updates the existing comment rather than creating a new one.
 
 ### Generating scenarios on-the-fly
 
@@ -98,11 +63,10 @@ Instead of relying on pre-existing scenarios in `evals/`, you can generate fresh
 ```yaml
 - uses: tesslio/skill-eval@main
   with:
-    eval: true
     eval-workspace: my-workspace
     eval-generate-scenarios: true
     eval-scenario-count: 3
-    tessl-api-key: ${{ secrets.TESSL_API_KEY }}
+    tessl-token: ${{ secrets.TESSL_TOKEN }}
 ```
 
 When `eval-generate-scenarios` is enabled, the action will:
@@ -132,17 +96,17 @@ jobs:
 
 For tiles with pre-existing scenarios (no generation), the total time is just the eval timeout.
 
-### Setting up the TESSL_API_KEY secret
+### Setting up the TESSL_TOKEN secret
 
 Evals require a Tessl API key. To add it as a GitHub repository secret:
 
 1. Go to your repository on GitHub
 2. Navigate to **Settings** > **Secrets and variables** > **Actions**
 3. Click **New repository secret**
-4. Set the name to `TESSL_API_KEY` and paste your API key as the value
+4. Set the name to `TESSL_TOKEN` and paste your API key as the value
 5. Click **Add secret**
 
-Then reference it in your workflow as `${{ secrets.TESSL_API_KEY }}`.
+Then reference it in your workflow as `${{ secrets.TESSL_TOKEN }}`.
 
 ## Local development
 
