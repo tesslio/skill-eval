@@ -15,6 +15,7 @@ async function main(): Promise<void> {
   const failOnRegression = process.env.INPUT_EVAL_FAIL_ON_REGRESSION !== 'false';
   const generateScenarios = process.env.INPUT_EVAL_GENERATE_SCENARIOS === 'true';
   const scenarioCount = parsePositiveInt(process.env.INPUT_EVAL_SCENARIO_COUNT, 'eval-scenario-count', 3);
+  const commitScenarios = process.env.INPUT_EVAL_COMMIT_SCENARIOS === 'true';
 
   if (!process.env.TESSL_TOKEN) {
     core.setFailed('tessl-token is required. Pass your Tessl API token via secrets.');
@@ -77,6 +78,18 @@ async function main(): Promise<void> {
         );
         return;
       }
+
+      // Commit generated scenarios back to the PR branch
+      if (commitScenarios) {
+        const evalsDirs = tilesNeedingGeneration.map((d) => `${d}/evals`);
+        console.log(`Committing generated scenarios: ${evalsDirs.join(', ')}`);
+        try {
+          await commitGeneratedScenarios(evalsDirs);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          core.warning(`Could not commit scenarios (fork PR or insufficient permissions): ${msg}`);
+        }
+      }
     }
   }
 
@@ -126,6 +139,29 @@ async function main(): Promise<void> {
   }
 
   console.log('Eval completed.');
+}
+
+async function git(...args: string[]): Promise<string> {
+  const proc = Bun.spawn(['git', ...args], { stdout: 'pipe', stderr: 'pipe' });
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  const exitCode = await proc.exited;
+  if (exitCode !== 0) {
+    throw new Error(`git ${args[0]} failed (exit ${exitCode}): ${stderr}`);
+  }
+  return stdout.trim();
+}
+
+async function commitGeneratedScenarios(evalsDirs: string[]): Promise<void> {
+  await git('config', 'user.name', 'github-actions[bot]');
+  await git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
+  await git('add', ...evalsDirs);
+  await git('commit', '-m', 'chore: add generated eval scenarios');
+  await git('push');
+  const hash = await git('rev-parse', '--short', 'HEAD');
+  console.log(`Committed generated scenarios (${hash})`);
 }
 
 export function parsePositiveInt(
