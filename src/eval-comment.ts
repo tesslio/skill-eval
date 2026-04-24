@@ -40,7 +40,9 @@ export function formatEvalComment(results: EvalResult[], failOnRegression: boole
     const regressionEmoji = failOnRegression && hasRegression ? ' ❌ regression' : '';
     const badge = result.overallScore >= 0 ? ` ${evalScoreBadge(result.overallScore)}${regressionEmoji}` : '';
 
-    let body = `### \`${displayPath}\`\n${badge}\n`;
+    const evalLink = result.runId ? `\n[View eval run on Tessl](https://tessl.io/eval-runs/${result.runId})\n` : '';
+
+    let body = `### \`${displayPath}\`\n${badge}\n${evalLink}`;
 
     if (result.scenarios.length > 0) {
       body += '\n| Scenario | Baseline | With Context | Delta |\n';
