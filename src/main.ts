@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import * as github from '@actions/github';
 import { getChangedSkillFiles } from './changed-files.ts';
 import { postOrUpdateEvalComment } from './eval-comment.ts';
 import { runEval } from './eval-run.ts';
@@ -7,6 +8,23 @@ import type { EvalResult } from './eval-types.ts';
 import { generateAndDownloadScenarios } from './scenario-generate.ts';
 
 async function main(): Promise<void> {
+  // Opt-in/opt-out: check enabled input, then check for skip label
+  const enabled = process.env.INPUT_ENABLED !== 'false';
+  if (!enabled) {
+    console.log('Eval is disabled (enabled: false). Skipping.');
+    return;
+  }
+
+  const skipLabel = process.env.INPUT_SKIP_LABEL || 'skip-eval';
+  if (skipLabel) {
+    const labels: Array<{ name: string }> =
+      github.context.payload.pull_request?.labels ?? [];
+    if (labels.some((l) => l.name === skipLabel)) {
+      console.log(`Eval skipped — PR has "${skipLabel}" label.`);
+      return;
+    }
+  }
+
   const rootPath = process.env.INPUT_PATH || '.';
   const shouldComment = process.env.INPUT_COMMENT !== 'false';
   const evalWorkspace = process.env.INPUT_EVAL_WORKSPACE || '';

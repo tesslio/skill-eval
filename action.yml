@@ -4,6 +4,12 @@ branding:
   icon: check-circle
   color: purple
 inputs:
+  enabled:
+    description: 'Enable eval runs. Set to false to disable entirely.'
+    default: 'true'
+  skip-label:
+    description: 'PR label that skips eval even when enabled. Set empty to disable.'
+    default: 'skip-eval'
   path:
     description: 'Root path to search for SKILL.md files'
     default: '.'
@@ -47,6 +53,8 @@ runs:
     - run: bun ${{ github.action_path }}/src/main.ts
       shell: bash
       env:
+        INPUT_ENABLED: ${{ inputs.enabled }}
+        INPUT_SKIP_LABEL: ${{ inputs.skip-label }}
         INPUT_PATH: ${{ inputs.path }}
         INPUT_COMMENT: ${{ inputs.comment }}
         INPUT_EVAL_WORKSPACE: ${{ inputs.eval-workspace }}
