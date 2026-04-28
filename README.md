@@ -34,6 +34,8 @@ Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigge
 
 | Input | Description | Default |
 |---|---|---|
+| `enabled` | Enable eval runs. Set to `false` to disable entirely. | `true` |
+| `skip-label` | PR label that skips eval even when enabled. Set empty to disable. | `skip-eval` |
 | `path` | Root path to search for SKILL.md files | `.` |
 | `comment` | Whether to post results as a PR comment | `true` |
 | `eval-workspace` | Tessl workspace name. Optional when tiles set workspace in `tile.json`. | `''` |
@@ -42,6 +44,7 @@ Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigge
 | `eval-fail-on-regression` | Fail the check if any scenario scores worse with context than baseline | `true` |
 | `eval-generate-scenarios` | Generate fresh scenarios for tiles without `evals/` | `false` |
 | `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
+| `eval-commit-scenarios` | Commit generated scenarios back to the PR branch (requires `contents: write`) | `false` |
 | `tessl-token` | Tessl API token. Pass via secrets. | **(required)** |
 
 ## How it works
@@ -51,6 +54,26 @@ Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigge
 3. Finds parent tile directories (containing `tile.json`) with eval scenarios
 4. Runs `tessl eval run` for each tile and polls for results
 5. Posts (or updates) an eval comment on the PR with per-scenario scores
+
+## Skipping evals
+
+Evals run by default. Two ways to skip them:
+
+**Disable in workflow YAML** (all PRs):
+```yaml
+- uses: tesslio/skill-eval@main
+  with:
+    enabled: false
+```
+
+**Skip per-PR with a label:** add the `skip-eval` label to any PR. To use a custom label name:
+```yaml
+- uses: tesslio/skill-eval@main
+  with:
+    skip-label: no-eval
+```
+
+Set `skip-label: ''` to disable the label check entirely.
 
 ## Comment behavior
 
