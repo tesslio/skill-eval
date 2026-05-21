@@ -37,6 +37,9 @@ inputs:
   eval-commit-scenarios:
     description: 'Commit generated scenarios back to the PR branch (requires contents: write)'
     default: 'false'
+  pr-number:
+    description: 'PR number to target. Required when running on issue_comment events; inferred automatically on pull_request events.'
+    default: ''
   tessl-token:
     description: 'Tessl API token for authentication. Pass via secrets.'
     required: true
@@ -64,5 +67,6 @@ runs:
         INPUT_EVAL_GENERATE_SCENARIOS: ${{ inputs.eval-generate-scenarios }}
         INPUT_EVAL_SCENARIO_COUNT: ${{ inputs.eval-scenario-count }}
         INPUT_EVAL_COMMIT_SCENARIOS: ${{ inputs.eval-commit-scenarios }}
+        INPUT_PR_NUMBER: ${{ inputs.pr-number }}
         GITHUB_TOKEN: ${{ github.token }}
         TESSL_TOKEN: ${{ inputs.tessl-token }}

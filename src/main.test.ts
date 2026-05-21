@@ -46,9 +46,78 @@ const { getChangedSkillFiles } = await import('./changed-files.ts');
 const { runSkillReview, extractJson } = await import('./skill-review.ts');
 const { postOrUpdateComment } = await import('./comment.ts');
 const { parsePositiveInt } = await import('./main.ts');
+const { resolvePrNumber, buildCommentMarker } = await import('./pr-context.ts');
 
 // ---------------------------------------------------------------------------
-// 1. parsePositiveInt
+// 1. resolvePrNumber
+// ---------------------------------------------------------------------------
+
+describe('resolvePrNumber', () => {
+  const originalInputPr = process.env.INPUT_PR_NUMBER;
+
+  afterEach(() => {
+    if (originalInputPr !== undefined) {
+      process.env.INPUT_PR_NUMBER = originalInputPr;
+    } else {
+      delete process.env.INPUT_PR_NUMBER;
+    }
+  });
+
+  test('prefers INPUT_PR_NUMBER when set', () => {
+    process.env.INPUT_PR_NUMBER = '99';
+    expect(resolvePrNumber()).toBe(99);
+  });
+
+  test('falls back to pull_request context when INPUT_PR_NUMBER is unset', () => {
+    delete process.env.INPUT_PR_NUMBER;
+    // Mock has context.payload.pull_request.number = 42
+    expect(resolvePrNumber()).toBe(42);
+  });
+
+  test('ignores non-numeric INPUT_PR_NUMBER and falls back to context', () => {
+    process.env.INPUT_PR_NUMBER = 'not-a-number';
+    expect(resolvePrNumber()).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2. buildCommentMarker
+// ---------------------------------------------------------------------------
+
+describe('buildCommentMarker', () => {
+  const originalAgent = process.env.INPUT_EVAL_AGENT;
+
+  afterEach(() => {
+    if (originalAgent !== undefined) {
+      process.env.INPUT_EVAL_AGENT = originalAgent;
+    } else {
+      delete process.env.INPUT_EVAL_AGENT;
+    }
+  });
+
+  test('returns default marker when INPUT_EVAL_AGENT is unset', () => {
+    delete process.env.INPUT_EVAL_AGENT;
+    expect(buildCommentMarker()).toBe('<!-- tessl-skill-eval -->');
+  });
+
+  test('returns default marker when INPUT_EVAL_AGENT is empty', () => {
+    process.env.INPUT_EVAL_AGENT = '';
+    expect(buildCommentMarker()).toBe('<!-- tessl-skill-eval -->');
+  });
+
+  test('scopes marker to agent when INPUT_EVAL_AGENT is set', () => {
+    process.env.INPUT_EVAL_AGENT = 'claude:claude-haiku-4-5';
+    expect(buildCommentMarker()).toBe('<!-- tessl-skill-eval:claude:claude-haiku-4-5 -->');
+  });
+
+  test('scopes marker to different agent', () => {
+    process.env.INPUT_EVAL_AGENT = 'codex:gpt-5.4-mini';
+    expect(buildCommentMarker()).toBe('<!-- tessl-skill-eval:codex:gpt-5.4-mini -->');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3. parsePositiveInt
 // ---------------------------------------------------------------------------
 
 describe('parsePositiveInt', () => {

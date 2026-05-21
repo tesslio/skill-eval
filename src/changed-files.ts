@@ -1,5 +1,6 @@
 import * as github from '@actions/github';
 import { join } from 'node:path';
+import { resolvePrNumber } from './pr-context.ts';
 
 export async function getChangedSkillFiles(
   rootPath: string,
@@ -9,15 +10,8 @@ export async function getChangedSkillFiles(
     throw new Error('GITHUB_TOKEN is required to detect changed files');
   }
 
-  const context = github.context;
-  if (!context.payload.pull_request) {
-    throw new Error(
-      'This action must run on pull_request events. No pull request context found.',
-    );
-  }
-
   const octokit = github.getOctokit(token);
-  const prNumber = context.payload.pull_request.number;
+  const prNumber = resolvePrNumber();
 
   const changedFiles: string[] = [];
   let page = 1;

@@ -1,7 +1,6 @@
 import * as github from '@actions/github';
 import type { EvalResult } from './eval-types.ts';
-
-const EVAL_COMMENT_MARKER = '<!-- tessl-skill-eval -->';
+import { buildCommentMarker, resolvePrNumber } from './pr-context.ts';
 
 function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|>~]/g, '\\$&');
@@ -83,7 +82,7 @@ export function formatEvalComment(results: EvalResult[], failOnRegression: boole
     '</details>',
   ].join('\n');
 
-  return `${EVAL_COMMENT_MARKER}\n## 🧪 Tessl Eval Results\n\n${sections.join('\n---\n\n')}\n${footer}`;
+  return `${buildCommentMarker()}\n## 🧪 Tessl Eval Results\n\n${sections.join('\n---\n\n')}\n${footer}`;
 }
 
 export async function postOrUpdateEvalComment(
@@ -96,12 +95,9 @@ export async function postOrUpdateEvalComment(
   }
 
   const context = github.context;
-  if (!context.payload.pull_request) {
-    throw new Error('No pull request context found');
-  }
-
+  const prNumber = resolvePrNumber();
+  const marker = buildCommentMarker();
   const octokit = github.getOctokit(token);
-  const prNumber = context.payload.pull_request.number;
   const body = formatEvalComment(results, failOnRegression);
 
   let existing: { id: number; body?: string | null } | undefined;
@@ -116,7 +112,7 @@ export async function postOrUpdateEvalComment(
       page: commentPage,
     });
 
-    existing = comments.find((c) => c.body?.includes(EVAL_COMMENT_MARKER));
+    existing = comments.find((c) => c.body?.includes(marker));
     if (comments.length < 100) break;
     commentPage++;
   }

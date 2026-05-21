@@ -274,13 +274,25 @@ describe('parseEvalViewOutput', () => {
 // ---------------------------------------------------------------------------
 
 describe('formatEvalComment', () => {
-  test('includes eval marker', async () => {
+  test('includes default eval marker when no agent is set', async () => {
+    delete process.env.INPUT_EVAL_AGENT;
     const { formatEvalComment } = await import('./eval-comment.ts');
     const body = formatEvalComment(
       [{ tilePath: '/tiles/my-tile', runId: 'run-123', status: 'completed', overallScore: 72, scenarios: [] }],
       false,
     );
     expect(body).toContain('<!-- tessl-skill-eval -->');
+  });
+
+  test('scopes eval marker to agent when INPUT_EVAL_AGENT is set', async () => {
+    process.env.INPUT_EVAL_AGENT = 'claude:claude-haiku-4-5';
+    const { formatEvalComment } = await import('./eval-comment.ts');
+    const body = formatEvalComment(
+      [{ tilePath: '/tiles/my-tile', runId: 'run-123', status: 'completed', overallScore: 72, scenarios: [] }],
+      false,
+    );
+    expect(body).toContain('<!-- tessl-skill-eval:claude:claude-haiku-4-5 -->');
+    delete process.env.INPUT_EVAL_AGENT;
   });
 
   test('includes scenario table with delta indicators', async () => {
