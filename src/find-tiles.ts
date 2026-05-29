@@ -4,15 +4,22 @@ import { existsSync, statSync } from 'node:fs';
 
 const MAX_WALK_UP = 5;
 
+function isPluginRoot(dir: string): boolean {
+  return (
+    existsSync(join(dir, '.tessl-plugin', 'plugin.json')) ||
+    existsSync(join(dir, 'tile.json'))
+  );
+}
+
 /**
- * Walk up from a file path to find the nearest directory containing tile.json.
- * Returns null if none found within MAX_WALK_UP levels. Logs a warning when
- * the limit is reached without finding a tile.
+ * Walk up from a file path to find the nearest plugin root directory.
+ * A plugin root contains either `.tessl-plugin/plugin.json` (current) or
+ * `tile.json` (legacy). Returns null if none found within MAX_WALK_UP levels.
  */
 export function findTileDir(filePath: string): string | null {
   let dir = dirname(filePath);
   for (let i = 0; i < MAX_WALK_UP; i++) {
-    if (existsSync(join(dir, 'tile.json'))) {
+    if (isPluginRoot(dir)) {
       return dir;
     }
     const parent = dirname(dir);
@@ -20,8 +27,8 @@ export function findTileDir(filePath: string): string | null {
     dir = parent;
   }
   core.warning(
-    `No tile.json found within ${MAX_WALK_UP} parent directories of ${filePath}. ` +
-    `If your tile is nested deeper, move SKILL.md closer to tile.json.`,
+    `No plugin root found within ${MAX_WALK_UP} parent directories of ${filePath}. ` +
+    `If your plugin is nested deeper, move SKILL.md closer to .tessl-plugin/plugin.json.`,
   );
   return null;
 }
