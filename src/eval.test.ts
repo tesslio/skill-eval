@@ -63,6 +63,17 @@ describe('findPluginDir', () => {
     expect(findPluginDir(join(tmp, 'skills', 'foo', 'SKILL.md'))).toBe(tmp);
   });
 
+  test('finds root when both .tessl-plugin/plugin.json and tile.json are present', async () => {
+    mkdirSync(join(tmp, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, '.tessl-plugin', 'plugin.json'), '{}');
+    writeFileSync(join(tmp, 'tile.json'), '{}');
+    mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
+
+    const { findPluginDir } = await import('./find-plugins.ts');
+    expect(findPluginDir(join(tmp, 'skills', 'foo', 'SKILL.md'))).toBe(tmp);
+  });
+
   test('returns null when no plugin root exists', async () => {
     mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
     writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
@@ -121,6 +132,19 @@ describe('findPluginDirsWithEvals', () => {
       join(tmp, 'skills', 'foo', 'SKILL.md'),
       join(tmp, 'skills', 'bar', 'SKILL.md'),
     ]);
+    expect(dirs).toEqual([tmp]);
+  });
+
+  test('returns dir when both .tessl-plugin/plugin.json and tile.json are present and evals/ exists', async () => {
+    mkdirSync(join(tmp, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, '.tessl-plugin', 'plugin.json'), '{}');
+    writeFileSync(join(tmp, 'tile.json'), '{}');
+    mkdirSync(join(tmp, 'evals', 'scenario-a'), { recursive: true });
+    mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
+
+    const { findPluginDirsWithEvals } = await import('./find-plugins.ts');
+    const dirs = findPluginDirsWithEvals([join(tmp, 'skills', 'foo', 'SKILL.md')]);
     expect(dirs).toEqual([tmp]);
   });
 
