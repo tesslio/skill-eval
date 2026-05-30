@@ -16,7 +16,7 @@ function isPluginRoot(dir: string): boolean {
  * A plugin root contains either `.tessl-plugin/plugin.json` (current) or
  * `tile.json` (legacy). Returns null if none found within MAX_WALK_UP levels.
  */
-export function findTileDir(filePath: string): string | null {
+export function findPluginDir(filePath: string): string | null {
   let dir = dirname(filePath);
   for (let i = 0; i < MAX_WALK_UP; i++) {
     if (isPluginRoot(dir)) {
@@ -34,19 +34,19 @@ export function findTileDir(filePath: string): string | null {
 }
 
 /**
- * Given a list of changed file paths, find unique tile directories
+ * Given a list of changed file paths, find unique plugin directories
  * that contain an evals/ subdirectory.
  */
-export function findTileDirsWithEvals(filePaths: string[]): string[] {
+export function findPluginDirsWithEvals(filePaths: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
 
   for (const filePath of filePaths) {
-    const tileDir = findTileDir(filePath);
-    const evalsPath = tileDir ? join(tileDir, 'evals') : '';
-    if (tileDir && !seen.has(tileDir) && existsSync(evalsPath) && statSync(evalsPath).isDirectory()) {
-      seen.add(tileDir);
-      result.push(tileDir);
+    const pluginDir = findPluginDir(filePath);
+    const evalsPath = pluginDir ? join(pluginDir, 'evals') : '';
+    if (pluginDir && !seen.has(pluginDir) && existsSync(evalsPath) && statSync(evalsPath).isDirectory()) {
+      seen.add(pluginDir);
+      result.push(pluginDir);
     }
   }
 
@@ -54,18 +54,18 @@ export function findTileDirsWithEvals(filePaths: string[]): string[] {
 }
 
 /**
- * Given a list of changed file paths, find unique tile directories
+ * Given a list of changed file paths, find unique plugin directories
  * (regardless of whether they have an evals/ subdirectory).
  */
-export function findTileDirs(filePaths: string[]): string[] {
+export function findPluginDirs(filePaths: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
 
   for (const filePath of filePaths) {
-    const tileDir = findTileDir(filePath);
-    if (tileDir && !seen.has(tileDir)) {
-      seen.add(tileDir);
-      result.push(tileDir);
+    const pluginDir = findPluginDir(filePath);
+    if (pluginDir && !seen.has(pluginDir)) {
+      seen.add(pluginDir);
+      result.push(pluginDir);
     }
   }
 
