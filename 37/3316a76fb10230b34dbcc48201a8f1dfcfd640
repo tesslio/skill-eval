@@ -1,0 +1,20 @@
+src/eval.test.ts
+  s_efaa263cb354e9::t_ad7c65a257afa8 66-76
+  s_efaa263cb354e9::t_7081d8e4e2880d 138-150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "373316a76fb10230b34dbcc48201a8f1dfcfd640",
+  "prompts": {},
+  "sessions": {
+    "s_efaa263cb354e9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "34a505f6-6b5a-4e32-b6a4-86443b224da8",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Doogal <doogal@tessl.io>"
+    }
+  }
+}
