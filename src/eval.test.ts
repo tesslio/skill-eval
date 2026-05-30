@@ -29,10 +29,10 @@ mock.module('@actions/github', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// 1. findTileDir / findTileDirsWithEvals
+// 1. findPluginDir / findPluginDirsWithEvals
 // ---------------------------------------------------------------------------
 
-describe('findTileDir', () => {
+describe('findPluginDir', () => {
   let tmp: string;
 
   beforeEach(() => {
@@ -44,25 +44,46 @@ describe('findTileDir', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  test('finds tile.json in immediate parent', async () => {
+  test('finds .tessl-plugin/plugin.json in immediate parent', async () => {
+    mkdirSync(join(tmp, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, '.tessl-plugin', 'plugin.json'), '{}');
+    mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
+
+    const { findPluginDir } = await import('./find-plugins.ts');
+    expect(findPluginDir(join(tmp, 'skills', 'foo', 'SKILL.md'))).toBe(tmp);
+  });
+
+  test('finds legacy tile.json in immediate parent', async () => {
     writeFileSync(join(tmp, 'tile.json'), '{}');
     mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
     writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
 
-    const { findTileDir } = await import('./find-tiles.ts');
-    expect(findTileDir(join(tmp, 'skills', 'foo', 'SKILL.md'))).toBe(tmp);
+    const { findPluginDir } = await import('./find-plugins.ts');
+    expect(findPluginDir(join(tmp, 'skills', 'foo', 'SKILL.md'))).toBe(tmp);
   });
 
-  test('returns null when no tile.json exists', async () => {
+  test('finds root when both .tessl-plugin/plugin.json and tile.json are present', async () => {
+    mkdirSync(join(tmp, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, '.tessl-plugin', 'plugin.json'), '{}');
+    writeFileSync(join(tmp, 'tile.json'), '{}');
     mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
     writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
 
-    const { findTileDir } = await import('./find-tiles.ts');
-    expect(findTileDir(join(tmp, 'skills', 'foo', 'SKILL.md'))).toBeNull();
+    const { findPluginDir } = await import('./find-plugins.ts');
+    expect(findPluginDir(join(tmp, 'skills', 'foo', 'SKILL.md'))).toBe(tmp);
+  });
+
+  test('returns null when no plugin root exists', async () => {
+    mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
+
+    const { findPluginDir } = await import('./find-plugins.ts');
+    expect(findPluginDir(join(tmp, 'skills', 'foo', 'SKILL.md'))).toBeNull();
   });
 });
 
-describe('findTileDirsWithEvals', () => {
+describe('findPluginDirsWithEvals', () => {
   let tmp: string;
 
   beforeEach(() => {
@@ -74,28 +95,81 @@ describe('findTileDirsWithEvals', () => {
     rmSync(tmp, { recursive: true, force: true });
   });
 
-  test('returns tile dir when evals/ exists', async () => {
+  test('returns plugin dir when evals/ exists', async () => {
+    mkdirSync(join(tmp, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, '.tessl-plugin', 'plugin.json'), '{}');
+    mkdirSync(join(tmp, 'evals', 'scenario-a'), { recursive: true });
+    mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
+
+    const { findPluginDirsWithEvals } = await import('./find-plugins.ts');
+    const dirs = findPluginDirsWithEvals([join(tmp, 'skills', 'foo', 'SKILL.md')]);
+    expect(dirs).toEqual([tmp]);
+  });
+
+  test('skips plugin dir when no evals/ exists', async () => {
+    mkdirSync(join(tmp, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, '.tessl-plugin', 'plugin.json'), '{}');
+    mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
+
+    const { findPluginDirsWithEvals } = await import('./find-plugins.ts');
+    const dirs = findPluginDirsWithEvals([join(tmp, 'skills', 'foo', 'SKILL.md')]);
+    expect(dirs).toEqual([]);
+  });
+
+  test('deduplicates when multiple skills share a plugin', async () => {
+    mkdirSync(join(tmp, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, '.tessl-plugin', 'plugin.json'), '{}');
+    mkdirSync(join(tmp, 'evals', 'scenario-a'), { recursive: true });
+    mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
+    mkdirSync(join(tmp, 'skills', 'bar'), { recursive: true });
+    writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
+    writeFileSync(join(tmp, 'skills', 'bar', 'SKILL.md'), '');
+
+    const { findPluginDirsWithEvals } = await import('./find-plugins.ts');
+    const dirs = findPluginDirsWithEvals([
+      join(tmp, 'skills', 'foo', 'SKILL.md'),
+      join(tmp, 'skills', 'bar', 'SKILL.md'),
+    ]);
+    expect(dirs).toEqual([tmp]);
+  });
+
+  test('returns dir when both .tessl-plugin/plugin.json and tile.json are present and evals/ exists', async () => {
+    mkdirSync(join(tmp, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, '.tessl-plugin', 'plugin.json'), '{}');
     writeFileSync(join(tmp, 'tile.json'), '{}');
     mkdirSync(join(tmp, 'evals', 'scenario-a'), { recursive: true });
     mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
     writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
 
-    const { findTileDirsWithEvals } = await import('./find-tiles.ts');
-    const dirs = findTileDirsWithEvals([join(tmp, 'skills', 'foo', 'SKILL.md')]);
+    const { findPluginDirsWithEvals } = await import('./find-plugins.ts');
+    const dirs = findPluginDirsWithEvals([join(tmp, 'skills', 'foo', 'SKILL.md')]);
     expect(dirs).toEqual([tmp]);
   });
 
-  test('skips tile dir when no evals/ exists', async () => {
+  test('returns legacy tile dir when evals/ exists', async () => {
+    writeFileSync(join(tmp, 'tile.json'), '{}');
+    mkdirSync(join(tmp, 'evals', 'scenario-a'), { recursive: true });
+    mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
+
+    const { findPluginDirsWithEvals } = await import('./find-plugins.ts');
+    const dirs = findPluginDirsWithEvals([join(tmp, 'skills', 'foo', 'SKILL.md')]);
+    expect(dirs).toEqual([tmp]);
+  });
+
+  test('skips legacy tile dir when no evals/ exists', async () => {
     writeFileSync(join(tmp, 'tile.json'), '{}');
     mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
     writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
 
-    const { findTileDirsWithEvals } = await import('./find-tiles.ts');
-    const dirs = findTileDirsWithEvals([join(tmp, 'skills', 'foo', 'SKILL.md')]);
+    const { findPluginDirsWithEvals } = await import('./find-plugins.ts');
+    const dirs = findPluginDirsWithEvals([join(tmp, 'skills', 'foo', 'SKILL.md')]);
     expect(dirs).toEqual([]);
   });
 
-  test('deduplicates when multiple skills share a tile', async () => {
+  test('deduplicates when multiple skills share a legacy tile', async () => {
     writeFileSync(join(tmp, 'tile.json'), '{}');
     mkdirSync(join(tmp, 'evals', 'scenario-a'), { recursive: true });
     mkdirSync(join(tmp, 'skills', 'foo'), { recursive: true });
@@ -103,8 +177,8 @@ describe('findTileDirsWithEvals', () => {
     writeFileSync(join(tmp, 'skills', 'foo', 'SKILL.md'), '');
     writeFileSync(join(tmp, 'skills', 'bar', 'SKILL.md'), '');
 
-    const { findTileDirsWithEvals } = await import('./find-tiles.ts');
-    const dirs = findTileDirsWithEvals([
+    const { findPluginDirsWithEvals } = await import('./find-plugins.ts');
+    const dirs = findPluginDirsWithEvals([
       join(tmp, 'skills', 'foo', 'SKILL.md'),
       join(tmp, 'skills', 'bar', 'SKILL.md'),
     ]);

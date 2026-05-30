@@ -3,7 +3,7 @@ import * as github from '@actions/github';
 import { getChangedSkillFiles } from './changed-files.ts';
 import { postOrUpdateEvalComment } from './eval-comment.ts';
 import { runEval } from './eval-run.ts';
-import { findTileDirs, findTileDirsWithEvals } from './find-tiles.ts';
+import { findPluginDirs, findPluginDirsWithEvals } from './find-plugins.ts';
 import type { EvalResult } from './eval-types.ts';
 import { generateAndDownloadScenarios } from './scenario-generate.ts';
 
@@ -53,53 +53,53 @@ async function main(): Promise<void> {
   );
 
   // 2. Find all tile directories
-  const allTileDirs = findTileDirs(changedFiles);
-  if (allTileDirs.length === 0) {
-    console.log('No tile directories found. Skipping eval.');
+  const allPluginDirs = findPluginDirs(changedFiles);
+  if (allPluginDirs.length === 0) {
+    console.log('No plugin directories found. Skipping eval.');
     return;
   }
 
-  // 3. Split into tiles with existing evals and tiles that need generation
-  const tilesWithEvals = findTileDirsWithEvals(changedFiles);
-  const tilesWithEvalsSet = new Set(tilesWithEvals);
-  const tilesNeedingGeneration = allTileDirs.filter((d) => !tilesWithEvalsSet.has(d));
+  // 3. Split into plugins with existing evals and plugins that need generation
+  const pluginsWithEvals = findPluginDirsWithEvals(changedFiles);
+  const pluginsWithEvalsSet = new Set(pluginsWithEvals);
+  const pluginsNeedingGeneration = allPluginDirs.filter((d) => !pluginsWithEvalsSet.has(d));
 
-  if (tilesWithEvals.length > 0) {
-    console.log(`Found ${tilesWithEvals.length} tile(s) with existing evals: ${tilesWithEvals.join(', ')}`);
+  if (pluginsWithEvals.length > 0) {
+    console.log(`Found ${pluginsWithEvals.length} plugin(s) with existing evals: ${pluginsWithEvals.join(', ')}`);
   }
 
-  if (tilesNeedingGeneration.length > 0) {
+  if (pluginsNeedingGeneration.length > 0) {
     if (!generateScenarios) {
       console.log(
-        `${tilesNeedingGeneration.length} tile(s) have no evals/ directory: ${tilesNeedingGeneration.join(', ')}. ` +
-        `Set eval-generate-scenarios: true to auto-generate scenarios for these tiles.`,
+        `${pluginsNeedingGeneration.length} plugin(s) have no evals/ directory: ${pluginsNeedingGeneration.join(', ')}. ` +
+        `Set eval-generate-scenarios: true to auto-generate scenarios for these plugins.`,
       );
     } else {
-      console.log(`Generating scenarios for ${tilesNeedingGeneration.length} tile(s) without evals/...`);
+      console.log(`Generating scenarios for ${pluginsNeedingGeneration.length} plugin(s) without evals/...`);
 
       const genFailures: string[] = [];
 
-      for (const tileDir of tilesNeedingGeneration) {
-        console.log(`  Generating ${scenarioCount} scenario(s) for ${tileDir}...`);
-        const genResult = await generateAndDownloadScenarios(tileDir, scenarioCount, evalTimeout);
+      for (const pluginDir of pluginsNeedingGeneration) {
+        console.log(`  Generating ${scenarioCount} scenario(s) for ${pluginDir}...`);
+        const genResult = await generateAndDownloadScenarios(pluginDir, scenarioCount, evalTimeout);
         if (!genResult.success) {
-          genFailures.push(`  ${tileDir}: ${genResult.error}`);
+          genFailures.push(`  ${pluginDir}: ${genResult.error}`);
         } else {
           console.log(`    Scenarios ready (generation ${genResult.generationId})`);
-          tilesWithEvals.push(tileDir);
+          pluginsWithEvals.push(pluginDir);
         }
       }
 
       if (genFailures.length > 0) {
         core.setFailed(
-          `Scenario generation failed for ${genFailures.length} tile(s):\n${genFailures.join('\n')}`,
+          `Scenario generation failed for ${genFailures.length} plugin(s):\n${genFailures.join('\n')}`,
         );
         return;
       }
 
       // Commit generated scenarios back to the PR branch
       if (commitScenarios) {
-        const evalsDirs = tilesNeedingGeneration.map((d) => `${d}/evals`);
+        const evalsDirs = pluginsNeedingGeneration.map((d) => `${d}/evals`);
         console.log(`Committing generated scenarios: ${evalsDirs.join(', ')}`);
         try {
           await commitGeneratedScenarios(evalsDirs);
@@ -111,20 +111,20 @@ async function main(): Promise<void> {
     }
   }
 
-  const tileDirs = tilesWithEvals;
-  if (tileDirs.length === 0) {
-    console.log('No tiles with eval scenarios to run. Skipping eval.');
+  const pluginDirs = pluginsWithEvals;
+  if (pluginDirs.length === 0) {
+    console.log('No plugins with eval scenarios to run. Skipping eval.');
     return;
   }
 
   // 4. Run evals (concurrently — each is mostly polling, not CPU-bound)
-  console.log(`Running evals for ${tileDirs.length} tile(s) concurrently...`);
+  console.log(`Running evals for ${pluginDirs.length} plugin(s) concurrently...`);
   const evalResults = await Promise.all(
-    tileDirs.map(async (tileDir) => {
-      console.log(`  Starting eval for ${tileDir}...`);
-      const result = await runEval(tileDir, evalWorkspace, evalAgent, evalTimeout);
+    pluginDirs.map(async (pluginDir) => {
+      console.log(`  Starting eval for ${pluginDir}...`);
+      const result = await runEval(pluginDir, evalWorkspace, evalAgent, evalTimeout);
       const status = result.error ? `ERROR: ${result.error}` : `score: ${result.overallScore}%`;
-      console.log(`  ${tileDir}: ${result.status} (${status})`);
+      console.log(`  ${pluginDir}: ${result.status} (${status})`);
       return result;
     }),
   );
