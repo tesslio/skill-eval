@@ -49,6 +49,7 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 | `skip-label` | PR label that skips eval even when enabled. Set empty to disable. | `skip-eval` |
 | `path` | Root path to search for SKILL.md files | `.` |
 | `comment` | Whether to post results as a PR comment | `true` |
+| `cli-version` | Tessl CLI version to install, for example `0.73.0` or `latest` | `latest` |
 | `eval-workspace` | Tessl workspace name. Optional when tiles set workspace in `tile.json`. | `''` |
 | `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
 | `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |
@@ -56,7 +57,6 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 | `eval-generate-scenarios` | Generate fresh scenarios for tiles without `evals/` | `false` |
 | `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
 | `eval-commit-scenarios` | Commit generated scenarios back to the PR branch (requires `contents: write`) | `false` |
-| `cli-version` | Tessl CLI version to install, for example `0.73.0` or `latest` | `latest` |
 | `tessl-token` | Tessl API token. Pass via secrets. | **(required)** |
 
 ## How it works

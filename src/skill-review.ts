@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { tesslBin } from './tessl-bin.ts';
 
 /** Format a score dimension as a table row with visual bar */
