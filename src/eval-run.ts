@@ -8,6 +8,7 @@ import type {
   RawScenario,
   RawSolution,
 } from './eval-types.ts';
+import { tesslBin } from './tessl-bin.ts';
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -149,7 +150,7 @@ export async function runEval(
     error,
   });
 
-  const args = ['tessl', 'eval', 'run', tilePath, '--agent', agent, '--json'];
+  const args = [tesslBin(), 'eval', 'run', tilePath, '--agent', agent, '--json'];
   if (workspace) {
     args.splice(4, 0, '--workspace', workspace);
   }
@@ -192,7 +193,7 @@ export async function runEval(
   while (Date.now() < deadline) {
     await Bun.sleep(POLL_INTERVAL_MS);
 
-    const viewProc = Bun.spawn(['tessl', 'eval', 'view', runId, '--json'], {
+    const viewProc = Bun.spawn([tesslBin(), 'eval', 'view', runId, '--json'], {
       stdout: 'pipe',
       stderr: 'pipe',
     });

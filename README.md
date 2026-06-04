@@ -30,6 +30,17 @@ jobs:
 
 Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigger an eval run and post results as a PR comment.
 
+To pin the Tessl CLI version used for eval runs, add `cli-version`:
+
+```yaml
+- uses: tesslio/skill-eval@main
+  with:
+    cli-version: 0.73.0
+    tessl-token: ${{ secrets.TESSL_TOKEN }}
+```
+
+Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific version when you need reproducible runs or a short rollout delay for new CLI releases.
+
 ## Inputs
 
 | Input | Description | Default |
@@ -45,6 +56,7 @@ Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigge
 | `eval-generate-scenarios` | Generate fresh scenarios for tiles without `evals/` | `false` |
 | `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
 | `eval-commit-scenarios` | Commit generated scenarios back to the PR branch (requires `contents: write`) | `false` |
+| `cli-version` | Tessl CLI version to install, for example `0.73.0` or `latest` | `latest` |
 | `tessl-token` | Tessl API token. Pass via secrets. | **(required)** |
 
 ## How it works
