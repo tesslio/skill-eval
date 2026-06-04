@@ -191,7 +191,7 @@ describe('findPluginDirsWithEvals', () => {
 // ---------------------------------------------------------------------------
 
 function makeMockSpawn(stdout: string, stderr: string, exitCode: number) {
-  return (..._args: unknown[]) => ({
+  return mock((..._args: unknown[]) => ({
     stdout: new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(stdout));
@@ -205,19 +205,56 @@ function makeMockSpawn(stdout: string, stderr: string, exitCode: number) {
       },
     }),
     exited: Promise.resolve(exitCode),
-  });
+  }));
 }
 
 describe('runEval', () => {
   let originalSpawn: typeof Bun.spawn;
+  let originalTesslBin: string | undefined;
 
   beforeEach(() => {
     originalSpawn = Bun.spawn;
+    originalTesslBin = process.env.TESSL_BIN;
   });
 
   afterEach(() => {
     // @ts-ignore restoring original
     Bun.spawn = originalSpawn;
+    if (originalTesslBin !== undefined) {
+      process.env.TESSL_BIN = originalTesslBin;
+    } else {
+      delete process.env.TESSL_BIN;
+    }
+  });
+
+  test('uses TESSL_BIN from setup-tessl when starting evals', async () => {
+    const spawnMock = makeMockSpawn('', 'auth failed', 1);
+    process.env.TESSL_BIN = '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl';
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+
+    const { runEval } = await import('./eval-run.ts');
+    await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1);
+
+    const firstCall = spawnMock.mock.calls[0] as unknown[];
+    expect(firstCall[0]).toEqual([
+      '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl',
+      'eval',
+      'run',
+      '/some/tile',
+      '--workspace',
+      'my-ws',
+      '--agent',
+      'claude:claude-sonnet-4-6',
+      '--json',
+    ]);
+  });
+
+  test('falls back to PATH when TESSL_BIN is blank', async () => {
+    process.env.TESSL_BIN = '   ';
+
+    const { tesslBin } = await import('./tessl-bin.ts');
+    expect(tesslBin()).toBe('tessl');
   });
 
   test('returns error when tessl eval run fails', async () => {
@@ -452,9 +489,11 @@ describe('formatEvalComment', () => {
 
 describe('generateAndDownloadScenarios', () => {
   let originalSpawn: typeof Bun.spawn;
+  let originalTesslBin: string | undefined;
 
   beforeEach(async () => {
     originalSpawn = Bun.spawn;
+    originalTesslBin = process.env.TESSL_BIN;
     // Use fast timings for tests
     const { setTimings } = await import('./scenario-generate.ts');
     setTimings(10, 10, 100); // 10ms poll, 10ms retry, 100ms retry timeout
@@ -463,9 +502,35 @@ describe('generateAndDownloadScenarios', () => {
   afterEach(async () => {
     // @ts-ignore restoring original
     Bun.spawn = originalSpawn;
+    if (originalTesslBin !== undefined) {
+      process.env.TESSL_BIN = originalTesslBin;
+    } else {
+      delete process.env.TESSL_BIN;
+    }
     // Restore real timings
     const { setTimings } = await import('./scenario-generate.ts');
     setTimings(30_000, 30_000, 15 * 60_000);
+  });
+
+  test('uses TESSL_BIN from setup-tessl when generating scenarios', async () => {
+    const spawnMock = makeMockSpawn('no json', '', 0);
+    process.env.TESSL_BIN = '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl';
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    await generateAndDownloadScenarios('/tile', 3, 1);
+
+    const firstCall = spawnMock.mock.calls[0] as unknown[];
+    expect(firstCall[0]).toEqual([
+      '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl',
+      'scenario',
+      'generate',
+      '/tile',
+      '-n',
+      '3',
+      '--json',
+    ]);
   });
 
   test('returns error when generate keeps failing and no in-progress found', async () => {

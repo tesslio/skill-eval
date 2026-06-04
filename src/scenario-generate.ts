@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import { join } from 'node:path';
 import { extractJson } from './skill-review.ts';
+import { tesslBin } from './tessl-bin.ts';
 
 export let POLL_INTERVAL_MS = 30_000;
 export let GENERATE_RETRY_INTERVAL_MS = 30_000;
@@ -34,7 +35,7 @@ function tileNameFromPath(tilePath: string): string {
  */
 async function findInProgressGeneration(tileName: string): Promise<string | null> {
   const proc = Bun.spawn(
-    ['tessl', 'scenario', 'list', '--mine', '--json'],
+    [tesslBin(), 'scenario', 'list', '--mine', '--json'],
     { stdout: 'pipe', stderr: 'pipe' },
   );
 
@@ -82,7 +83,7 @@ async function startOrAdoptGeneration(
   while (Date.now() < deadline) {
     // Try to start a new generation
     const genProc = Bun.spawn(
-      ['tessl', 'scenario', 'generate', tilePath, '-n', String(count), '--json'],
+      [tesslBin(), 'scenario', 'generate', tilePath, '-n', String(count), '--json'],
       { stdout: 'pipe', stderr: 'pipe' },
     );
 
@@ -162,7 +163,7 @@ export async function generateAndDownloadScenarios(
     await Bun.sleep(POLL_INTERVAL_MS);
 
     const viewProc = Bun.spawn(
-      ['tessl', 'scenario', 'view', generationId, '--json'],
+      [tesslBin(), 'scenario', 'view', generationId, '--json'],
       { stdout: 'pipe', stderr: 'pipe' },
     );
 
@@ -211,7 +212,7 @@ export async function generateAndDownloadScenarios(
   // 3. Download scenarios
   const evalsDir = join(tilePath, 'evals');
   const dlProc = Bun.spawn(
-    ['tessl', 'scenario', 'download', generationId, '-o', evalsDir, '--json'],
+    [tesslBin(), 'scenario', 'download', generationId, '-o', evalsDir, '--json'],
     { stdout: 'pipe', stderr: 'pipe' },
   );
 

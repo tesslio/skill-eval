@@ -30,6 +30,17 @@ jobs:
 
 Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigger an eval run and post results as a PR comment.
 
+To pin the Tessl CLI version used for eval runs, add `cli-version`:
+
+```yaml
+- uses: tesslio/skill-eval@main
+  with:
+    cli-version: 0.73.0
+    tessl-token: ${{ secrets.TESSL_TOKEN }}
+```
+
+Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific version when you need reproducible runs or a short rollout delay for new CLI releases.
+
 ## Inputs
 
 | Input | Description | Default |
@@ -38,6 +49,7 @@ Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigge
 | `skip-label` | PR label that skips eval even when enabled. Set empty to disable. | `skip-eval` |
 | `path` | Root path to search for SKILL.md files | `.` |
 | `comment` | Whether to post results as a PR comment | `true` |
+| `cli-version` | Tessl CLI version to install, for example `0.73.0` or `latest` | `latest` |
 | `eval-workspace` | Tessl workspace name. Optional when tiles set workspace in `tile.json`. | `''` |
 | `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
 | `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |

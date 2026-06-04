@@ -242,14 +242,21 @@ describe('runSkillReview', () => {
   }
 
   let originalSpawn: typeof Bun.spawn;
+  let originalTesslBin: string | undefined;
 
   beforeEach(() => {
     originalSpawn = Bun.spawn;
+    originalTesslBin = process.env.TESSL_BIN;
   });
 
   afterEach(() => {
     // @ts-ignore restoring original
     Bun.spawn = originalSpawn;
+    if (originalTesslBin !== undefined) {
+      process.env.TESSL_BIN = originalTesslBin;
+    } else {
+      delete process.env.TESSL_BIN;
+    }
   });
 
   test('successful review with JSON output', async () => {
@@ -271,6 +278,31 @@ describe('runSkillReview', () => {
     expect(result.error).toBeUndefined();
     expect(result.output).toContain('All checks passed.');
     expect(result.output).toContain('Good skill definition.');
+  });
+
+  test('uses TESSL_BIN from setup-tessl when provided', async () => {
+    const jsonOutput = JSON.stringify({
+      contentJudge: {
+        normalizedScore: 0.85,
+        evaluation: 'Good skill definition.',
+      },
+    });
+    const spawnMock = makeMockSpawn(jsonOutput, '', 0);
+
+    process.env.TESSL_BIN = '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl';
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+
+    await runSkillReview('skills/test/SKILL.md', 70);
+
+    const firstCall = spawnMock.mock.calls[0] as unknown[];
+    expect(firstCall[0]).toEqual([
+      '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl',
+      'skill',
+      'review',
+      '--json',
+      'skills/test',
+    ]);
   });
 
   test('CLI failure (non-zero exit)', async () => {

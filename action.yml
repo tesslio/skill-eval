@@ -37,14 +37,19 @@ inputs:
   eval-commit-scenarios:
     description: 'Commit generated scenarios back to the PR branch (requires contents: write)'
     default: 'false'
+  cli-version:
+    description: 'Tessl CLI version to install (for example "0.73.0", or "latest")'
+    default: 'latest'
   tessl-token:
     description: 'Tessl API token for authentication. Pass via secrets.'
     required: true
 runs:
   using: 'composite'
   steps:
-    - uses: tesslio/setup-tessl@v2
+    - id: setup-tessl
+      uses: tesslio/setup-tessl@v2
       with:
+        version: ${{ inputs.cli-version }}
         token: ${{ inputs.tessl-token }}
     - uses: oven-sh/setup-bun@v2
     - run: bun install --production --frozen-lockfile
@@ -66,3 +71,4 @@ runs:
         INPUT_EVAL_COMMIT_SCENARIOS: ${{ inputs.eval-commit-scenarios }}
         GITHUB_TOKEN: ${{ github.token }}
         TESSL_TOKEN: ${{ inputs.tessl-token }}
+        TESSL_BIN: ${{ steps.setup-tessl.outputs.path }}

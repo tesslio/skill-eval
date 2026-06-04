@@ -1,4 +1,5 @@
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
+import { tesslBin } from './tessl-bin.ts';
 
 /** Format a score dimension as a table row with visual bar */
 function scoreBar(score: number, max = 3): string {
@@ -117,7 +118,7 @@ export async function runSkillReview(
 ): Promise<SkillReviewResult> {
   const skillDir = dirname(skillFilePath);
 
-  const proc = Bun.spawn(['tessl', 'skill', 'review', '--json', skillDir], {
+  const proc = Bun.spawn([tesslBin(), 'skill', 'review', '--json', skillDir], {
     stdout: 'pipe',
     stderr: 'pipe',
   });
