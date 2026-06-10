@@ -1,9 +1,18 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
-import { getChangedSkillFiles } from './changed-files.ts';
-import { postOrUpdateEvalComment } from './eval-comment.ts';
+import { existsSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { getChangedEvalTargetFiles } from './changed-files.ts';
+import { parseTesslCommentCommand, isTrustedAuthorAssociation } from './comment-command.ts';
+import { postGeneratedScenariosComment, postOrUpdateEvalComment } from './eval-comment.ts';
 import { runEval } from './eval-run.ts';
-import { findPluginDirs, findPluginDirsWithEvals } from './find-plugins.ts';
+import { findPluginDirs, findPluginDirsWithEvals, resolveRequestedPluginDir } from './find-plugins.ts';
+import { commitGeneratedScenarios } from './git-utils.ts';
+import {
+  getPayloadLabels,
+  getPullRequestHead,
+  getPullRequestNumber,
+} from './github-context.ts';
 import type { EvalResult } from './eval-types.ts';
 import { generateAndDownloadScenarios } from './scenario-generate.ts';
 
@@ -17,8 +26,7 @@ async function main(): Promise<void> {
 
   const skipLabel = process.env.INPUT_SKIP_LABEL || 'skip-eval';
   if (skipLabel) {
-    const labels: Array<{ name: string }> =
-      github.context.payload.pull_request?.labels ?? [];
+    const labels = getPayloadLabels();
     if (labels.some((l) => l.name === skipLabel)) {
       console.log(`Eval skipped — PR has "${skipLabel}" label.`);
       return;
@@ -35,21 +43,76 @@ async function main(): Promise<void> {
   const scenarioCount = parsePositiveInt(process.env.INPUT_EVAL_SCENARIO_COUNT, 'eval-scenario-count', 3);
   const commitScenarios = process.env.INPUT_EVAL_COMMIT_SCENARIOS === 'true';
 
+  const isIssueComment = github.context.eventName === 'issue_comment';
+  const prNumber = getPullRequestNumber();
+
+  if (isIssueComment) {
+    const command = parseTesslCommentCommand(github.context.payload.comment?.body as string | undefined);
+    if (!command) {
+      console.log('No /tessl eval or /tessl scenarios command found. Skipping.');
+      return;
+    }
+
+    if (prNumber === null) {
+      core.setFailed('Comment commands only work on pull requests.');
+      return;
+    }
+
+    const association = github.context.payload.comment?.author_association as string | undefined;
+    if (!isTrustedAuthorAssociation(association)) {
+      core.setFailed(
+        `Comment command is restricted to repo collaborators (got author_association ${association ?? 'NONE'}).`,
+      );
+      return;
+    }
+
+    if (!process.env.TESSL_TOKEN) {
+      core.setFailed('tessl-token is required. Pass your Tessl API token via secrets.');
+      return;
+    }
+
+    const pluginDir = resolveRequestedPluginDir(command.requestedPath, rootPath);
+    if (!pluginDir) {
+      core.setFailed(
+        `Could not resolve "${command.requestedPath}" to a Tessl plugin or tile. ` +
+        'Pass a plugin directory, skill directory, SKILL.md file, or evals/ path.',
+      );
+      return;
+    }
+
+    if (command.kind === 'scenarios') {
+      await generateCommitAndReportScenarios(pluginDir, scenarioCount, evalTimeout, prNumber);
+      return;
+    }
+
+    if (!hasEvalsDir(pluginDir)) {
+      core.setFailed(
+        `No eval scenarios found for ${pluginDir}. ` +
+        `Comment \`/tessl scenarios ${pluginDir.replace(/^\.\//, '')}\` to generate editable scenarios first.`,
+      );
+      return;
+    }
+
+    const evalResults = await runEvalAndReport([pluginDir], evalWorkspace, evalAgent, evalTimeout, shouldComment, failOnRegression, prNumber);
+    failForRegressions(evalResults, failOnRegression);
+    return;
+  }
+
   if (!process.env.TESSL_TOKEN) {
     core.setFailed('tessl-token is required. Pass your Tessl API token via secrets.');
     return;
   }
 
-  // 1. Detect changed SKILL.md files
-  const changedFiles = await getChangedSkillFiles(rootPath);
+  // 1. Detect changed SKILL.md or eval scenario files
+  const changedFiles = await getChangedEvalTargetFiles(rootPath);
 
   if (changedFiles.length === 0) {
-    console.log('No SKILL.md files changed in this PR. Nothing to eval.');
+    console.log('No SKILL.md or eval scenario files changed in this PR. Nothing to eval.');
     return;
   }
 
   console.log(
-    `Found ${changedFiles.length} changed SKILL.md file(s): ${changedFiles.join(', ')}`,
+    `Found ${changedFiles.length} changed eval target file(s): ${changedFiles.join(', ')}`,
   );
 
   // 2. Find all tile directories
@@ -99,10 +162,16 @@ async function main(): Promise<void> {
 
       // Commit generated scenarios back to the PR branch
       if (commitScenarios) {
-        const evalsDirs = pluginsNeedingGeneration.map((d) => `${d}/evals`);
+        const evalsDirs = pluginsNeedingGeneration.map((d) => join(d, 'evals'));
         console.log(`Committing generated scenarios: ${evalsDirs.join(', ')}`);
         try {
-          await commitGeneratedScenarios(evalsDirs);
+          const token = process.env.GITHUB_TOKEN;
+          if (!token) throw new Error('GITHUB_TOKEN is required to commit generated scenarios');
+          const octokit = github.getOctokit(token);
+          const number = prNumber ?? github.context.payload.pull_request?.number;
+          if (!number) throw new Error('No pull request context found');
+          const prHead = await getPullRequestHead(octokit, number);
+          await commitGeneratedScenarios(evalsDirs, prHead);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           core.warning(`Could not commit scenarios (fork PR or insufficient permissions): ${msg}`);
@@ -117,7 +186,53 @@ async function main(): Promise<void> {
     return;
   }
 
-  // 4. Run evals (concurrently — each is mostly polling, not CPU-bound)
+  const evalResults = await runEvalAndReport(pluginDirs, evalWorkspace, evalAgent, evalTimeout, shouldComment, failOnRegression, prNumber);
+  failForRegressions(evalResults, failOnRegression);
+
+  console.log('Eval completed.');
+}
+
+function hasEvalsDir(pluginDir: string): boolean {
+  const evalsDir = join(pluginDir, 'evals');
+  return existsSync(evalsDir) && statSync(evalsDir).isDirectory();
+}
+
+async function generateCommitAndReportScenarios(
+  pluginDir: string,
+  scenarioCount: number,
+  evalTimeout: number,
+  prNumber: number,
+): Promise<void> {
+  console.log(`Generating ${scenarioCount} scenario(s) for ${pluginDir}...`);
+  const genResult = await generateAndDownloadScenarios(pluginDir, scenarioCount, evalTimeout);
+  if (!genResult.success) {
+    core.setFailed(`Scenario generation failed for ${pluginDir}: ${genResult.error}`);
+    return;
+  }
+
+  try {
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) throw new Error('GITHUB_TOKEN is required to commit generated scenarios');
+    const octokit = github.getOctokit(token);
+    const prHead = await getPullRequestHead(octokit, prNumber);
+    const commitSha = await commitGeneratedScenarios([join(pluginDir, 'evals')], prHead);
+    await postGeneratedScenariosComment(pluginDir, genResult.generationId, commitSha, prNumber);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    core.setFailed(`Generated scenarios, but could not commit them to the PR branch: ${msg}`);
+  }
+}
+
+async function runEvalAndReport(
+  pluginDirs: string[],
+  evalWorkspace: string,
+  evalAgent: string,
+  evalTimeout: number,
+  shouldComment: boolean,
+  failOnRegression: boolean,
+  prNumber: number | null,
+): Promise<EvalResult[]> {
+  // Run evals (concurrently — each is mostly polling, not CPU-bound)
   console.log(`Running evals for ${pluginDirs.length} plugin(s) concurrently...`);
   const evalResults = await Promise.all(
     pluginDirs.map(async (pluginDir) => {
@@ -132,14 +247,17 @@ async function main(): Promise<void> {
   // 5. Post eval PR comment
   if (shouldComment) {
     try {
-      await postOrUpdateEvalComment(evalResults, failOnRegression);
+      await postOrUpdateEvalComment(evalResults, failOnRegression, prNumber);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       core.warning(`Could not post eval PR comment: ${msg}`);
     }
   }
 
-  // 6. Check for regressions (with-context scored worse than baseline)
+  return evalResults;
+}
+
+function failForRegressions(evalResults: EvalResult[], failOnRegression: boolean): void {
   if (failOnRegression) {
     const regressions = evalResults.flatMap((r) =>
       r.scenarios
@@ -155,31 +273,6 @@ async function main(): Promise<void> {
       );
     }
   }
-
-  console.log('Eval completed.');
-}
-
-async function git(...args: string[]): Promise<string> {
-  const proc = Bun.spawn(['git', ...args], { stdout: 'pipe', stderr: 'pipe' });
-  const [stdout, stderr] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-  ]);
-  const exitCode = await proc.exited;
-  if (exitCode !== 0) {
-    throw new Error(`git ${args[0]} failed (exit ${exitCode}): ${stderr}`);
-  }
-  return stdout.trim();
-}
-
-async function commitGeneratedScenarios(evalsDirs: string[]): Promise<void> {
-  await git('config', 'user.name', 'github-actions[bot]');
-  await git('config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
-  await git('add', ...evalsDirs);
-  await git('commit', '-m', 'chore: add generated eval scenarios');
-  await git('push');
-  const hash = await git('rev-parse', '--short', 'HEAD');
-  console.log(`Committed generated scenarios (${hash})`);
 }
 
 export function parsePositiveInt(

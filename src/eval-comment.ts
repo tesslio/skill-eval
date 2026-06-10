@@ -1,5 +1,6 @@
 import * as github from '@actions/github';
 import type { EvalResult } from './eval-types.ts';
+import { getPullRequestNumber } from './github-context.ts';
 
 const EVAL_COMMENT_MARKER = '<!-- tessl-skill-eval -->';
 
@@ -89,19 +90,18 @@ export function formatEvalComment(results: EvalResult[], failOnRegression: boole
 export async function postOrUpdateEvalComment(
   results: EvalResult[],
   failOnRegression: boolean,
+  prNumber = getPullRequestNumber(),
 ): Promise<void> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
     throw new Error('GITHUB_TOKEN is required to post eval comments');
   }
 
-  const context = github.context;
-  if (!context.payload.pull_request) {
+  if (prNumber === null) {
     throw new Error('No pull request context found');
   }
 
   const octokit = github.getOctokit(token);
-  const prNumber = context.payload.pull_request.number;
   const body = formatEvalComment(results, failOnRegression);
 
   let existing: { id: number; body?: string | null } | undefined;
@@ -109,8 +109,8 @@ export async function postOrUpdateEvalComment(
 
   while (!existing) {
     const { data: comments } = await octokit.rest.issues.listComments({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
       issue_number: prNumber,
       per_page: 100,
       page: commentPage,
@@ -123,19 +123,56 @@ export async function postOrUpdateEvalComment(
 
   if (existing) {
     await octokit.rest.issues.updateComment({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
       comment_id: existing.id,
       body,
     });
     console.log(`Updated existing eval comment (id: ${existing.id})`);
   } else {
     await octokit.rest.issues.createComment({
-      owner: context.repo.owner,
-      repo: context.repo.repo,
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
       issue_number: prNumber,
       body,
     });
     console.log('Posted new eval comment');
   }
+}
+
+export async function postGeneratedScenariosComment(
+  pluginDir: string,
+  generationId: string,
+  commitSha: string,
+  prNumber = getPullRequestNumber(),
+): Promise<void> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    throw new Error('GITHUB_TOKEN is required to post scenario comments');
+  }
+  if (prNumber === null) {
+    throw new Error('No pull request context found');
+  }
+
+  const octokit = github.getOctokit(token);
+  const evalsDir = `${pluginDir.replace(/^\.\//, '')}/evals`;
+  const body = [
+    '## Tessl scenarios generated',
+    '',
+    `Generated editable scenarios in \`${evalsDir}\` and committed them to this PR (${commitSha}).`,
+    '',
+    'Next steps:',
+    '',
+    `- Review or edit the generated scenario files in \`${evalsDir}\`.`,
+    `- Comment \`/tessl eval ${pluginDir.replace(/^\.\//, '')}\` when you are ready to run evals.`,
+    '',
+    `<sub>Scenario generation: ${generationId}</sub>`,
+  ].join('\n');
+
+  await octokit.rest.issues.createComment({
+    owner: github.context.repo.owner,
+    repo: github.context.repo.repo,
+    issue_number: prNumber,
+    body,
+  });
 }

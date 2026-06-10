@@ -1,8 +1,14 @@
 # Tessl Skill Eval Action
 
-A GitHub Action that runs Tessl evals against tiles when `SKILL.md` files change in a pull request, and posts the results as a PR comment with per-scenario scoring.
+A GitHub Action that generates reviewable Tessl scenarios and runs skill evals from pull requests.
 
-Requires a `TESSL_TOKEN` to authenticate with the Tessl API. The GitHub-provided `GITHUB_TOKEN` is used for posting PR comments.
+Use it to:
+
+- Comment `/tessl scenarios path/to/skill` to generate editable scenarios.
+- Review or edit the generated `evals/` files directly in the PR.
+- Comment `/tessl eval path/to/skill` to run evals against the current PR head.
+
+Requires a `TESSL_TOKEN` to authenticate with the Tessl API. The GitHub-provided `GITHUB_TOKEN` is used for PR comments and, when allowed, committing generated scenarios back to the PR branch.
 
 ## Usage
 
@@ -10,25 +16,44 @@ Add this workflow to your repository at `.github/workflows/skill-eval.yml`:
 
 ```yaml
 name: Tessl Skill Eval
+
 on:
   pull_request:
-    paths: ['**/SKILL.md', '**/evals/**']
+    paths:
+      - "**/SKILL.md"
+      - "**/evals/**"
+  issue_comment:
+    types: [created]
 
 jobs:
   eval:
+    if: github.event_name == 'pull_request' || github.event.issue.pull_request
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
+      contents: write
+      issues: write
       pull-requests: write
-      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'issue_comment' && format('refs/pull/{0}/head', github.event.issue.number) || github.ref }}
+          fetch-depth: 0
+
       - uses: tesslio/skill-eval@main
         with:
           tessl-token: ${{ secrets.TESSL_TOKEN }}
 ```
 
-Any PR that modifies a `SKILL.md` file in a tile with eval scenarios will trigger an eval run and post results as a PR comment.
+Any PR that modifies `SKILL.md` or `evals/**` files in a tile with scenarios will trigger an eval run and post results as a PR comment.
+
+PR comments also support:
+
+- `/tessl scenarios path/to/skill` generates scenarios, commits them under `evals/`, and posts a short follow-up comment.
+- `/tessl eval path/to/skill` runs evals against the current PR head and posts or updates the eval result comment.
+- `<path>` can point to a tile/plugin directory, skill directory, `SKILL.md`, or a file under `evals/`.
+
+Comment commands only run for trusted repo participants: `OWNER`, `MEMBER`, or `COLLABORATOR`.
 
 To pin the Tessl CLI version used for eval runs, add `cli-version`:
 
@@ -61,9 +86,9 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 
 ## How it works
 
-1. Detects which `SKILL.md` files were changed in the PR
+1. Detects changed `SKILL.md` or `evals/**` files in the PR
 2. Installs the [Tessl CLI](https://tessl.io) and authenticates with your token
-3. Finds parent tile directories (containing `tile.json`) with eval scenarios
+3. Finds parent plugin/tile directories containing `.tessl-plugin/plugin.json` or `tile.json`
 4. Runs `tessl eval run` for each tile and polls for results
 5. Posts (or updates) an eval comment on the PR with per-scenario scores
 
@@ -91,9 +116,17 @@ Set `skip-label: ''` to disable the label check entirely.
 
 The action posts a single eval comment per PR. On subsequent pushes, it updates the existing comment rather than creating a new one.
 
-### Generating scenarios on-the-fly
+### Generating scenarios
 
-Instead of relying on pre-existing scenarios in `evals/`, you can generate fresh scenarios from your tile before running evals:
+The recommended PR loop is comment-driven:
+
+1. Comment `/tessl scenarios path/to/skill`.
+2. Review or edit the generated `evals/` files in the PR.
+3. Comment `/tessl eval path/to/skill`.
+
+Generated scenarios are committed as real PR files so reviewers can use normal GitHub review, suggestions, and diffs.
+
+You can also generate scenarios automatically during pull request runs:
 
 ```yaml
 - uses: tesslio/skill-eval@main
@@ -105,16 +138,17 @@ Instead of relying on pre-existing scenarios in `evals/`, you can generate fresh
 ```
 
 When `eval-generate-scenarios` is enabled, the action will:
+
 1. Find all tile directories (not just those with existing `evals/`)
 2. Run `tessl scenario generate` to create fresh scenarios for each tile
 3. Download the generated scenarios to the tile's `evals/` directory
 4. Run evals against the newly generated scenarios
 
-This is useful for tiles that don't have checked-in scenarios, or when you want to evaluate against fresh scenarios generated from the current tile state.
+Set `eval-commit-scenarios: true` to commit those generated files back to same-repo PR branches. Fork PRs may not allow scenario commits; in that case the action warns clearly instead of hiding the permission problem.
 
 ### How eval detection works
 
-When evals are enabled, the action walks up from each changed `SKILL.md` file to find the parent tile directory (a directory containing `tile.json`). The search checks up to **5 parent directories** — if your `SKILL.md` is nested deeper than that relative to `tile.json`, the tile won't be detected (a warning is logged). If that tile directory also contains an `evals/` subdirectory with scenario files, the tile is included in the eval run. Tiles without an `evals/` directory are skipped.
+When evals are enabled, the action walks up from each changed `SKILL.md` or `evals/**` file to find the parent plugin or tile directory. A root contains `.tessl-plugin/plugin.json` or `tile.json`. The search checks up to **5 parent directories**. If that root has an `evals/` directory, it is included in the eval run. Roots without `evals/` are skipped unless scenario generation is enabled.
 
 ### Timeouts and long-running jobs
 

@@ -83,6 +83,45 @@ describe('findPluginDir', () => {
   });
 });
 
+describe('resolveRequestedPluginDir', () => {
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = join(tmpdir(), `eval-test-${Date.now()}`);
+    mkdirSync(tmp, { recursive: true });
+    mkdirSync(join(tmp, 'tile', '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(tmp, 'tile', '.tessl-plugin', 'plugin.json'), '{}');
+    mkdirSync(join(tmp, 'tile', 'skills', 'foo'), { recursive: true });
+    writeFileSync(join(tmp, 'tile', 'skills', 'foo', 'SKILL.md'), '');
+    mkdirSync(join(tmp, 'tile', 'evals', 'scenario-a'), { recursive: true });
+    writeFileSync(join(tmp, 'tile', 'evals', 'scenario-a', 'scenario.json'), '{}');
+  });
+
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+  });
+
+  test('resolves plugin root directory', async () => {
+    const { resolveRequestedPluginDir } = await import('./find-plugins.ts');
+    expect(resolveRequestedPluginDir('tile', tmp)).toBe(join(tmp, 'tile'));
+  });
+
+  test('resolves skill directory', async () => {
+    const { resolveRequestedPluginDir } = await import('./find-plugins.ts');
+    expect(resolveRequestedPluginDir('tile/skills/foo', tmp)).toBe(join(tmp, 'tile'));
+  });
+
+  test('resolves SKILL.md file', async () => {
+    const { resolveRequestedPluginDir } = await import('./find-plugins.ts');
+    expect(resolveRequestedPluginDir('tile/skills/foo/SKILL.md', tmp)).toBe(join(tmp, 'tile'));
+  });
+
+  test('resolves evals file', async () => {
+    const { resolveRequestedPluginDir } = await import('./find-plugins.ts');
+    expect(resolveRequestedPluginDir('tile/evals/scenario-a/scenario.json', tmp)).toBe(join(tmp, 'tile'));
+  });
+});
+
 describe('findPluginDirsWithEvals', () => {
   let tmp: string;
 

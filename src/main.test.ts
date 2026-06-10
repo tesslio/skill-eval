@@ -5,8 +5,11 @@ import type { SkillReviewResult } from './skill-review.ts';
 // Mock @actions/core and @actions/github at module level
 // ---------------------------------------------------------------------------
 
+const setFailedMock = mock(() => {});
+
 mock.module('@actions/core', () => ({
-  setFailed: mock(() => {}),
+  setFailed: setFailedMock,
+  setOutput: mock(() => {}),
   getInput: mock(() => ''),
   info: mock(() => {}),
   warning: mock(() => {}),
@@ -26,6 +29,7 @@ const listCommentsMock = mock(() =>
 
 mock.module('@actions/github', () => ({
   context: {
+    eventName: 'pull_request',
     payload: { pull_request: { number: 42 } },
     repo: { owner: 'test-owner', repo: 'test-repo' },
   },
@@ -42,10 +46,13 @@ mock.module('@actions/github', () => ({
 }));
 
 // Import after mock registration
-const { getChangedSkillFiles } = await import('./changed-files.ts');
+const { getChangedSkillFiles, getChangedEvalTargetFiles } = await import('./changed-files.ts');
 const { runSkillReview, extractJson } = await import('./skill-review.ts');
 const { postOrUpdateComment } = await import('./comment.ts');
 const { parsePositiveInt } = await import('./main.ts');
+const { parseTesslCommentCommand, isTrustedAuthorAssociation } = await import('./comment-command.ts');
+const { shouldRunPreflight } = await import('./preflight.ts');
+const githubModule = await import('@actions/github');
 
 // ---------------------------------------------------------------------------
 // 1. parsePositiveInt
@@ -82,6 +89,117 @@ describe('parsePositiveInt', () => {
 
   test('throws for NaN', () => {
     expect(() => parsePositiveInt('NaN', 'eval-timeout', 45)).toThrow('Invalid eval-timeout');
+  });
+});
+
+describe('comment command parsing', () => {
+  test('parses scenarios command', () => {
+    expect(parseTesslCommentCommand('/tessl scenarios skills/item')).toEqual({
+      kind: 'scenarios',
+      requestedPath: 'skills/item',
+    });
+  });
+
+  test('parses eval command from multiline comment', () => {
+    expect(parseTesslCommentCommand('please run this\n/tessl eval plugins/foo/SKILL.md')).toEqual({
+      kind: 'eval',
+      requestedPath: 'plugins/foo/SKILL.md',
+    });
+  });
+
+  test('rejects commands with extra args', () => {
+    expect(parseTesslCommentCommand('/tessl eval skills/item please')).toBeNull();
+  });
+
+  test('trusts only collaborator associations', () => {
+    expect(isTrustedAuthorAssociation('OWNER')).toBe(true);
+    expect(isTrustedAuthorAssociation('MEMBER')).toBe(true);
+    expect(isTrustedAuthorAssociation('COLLABORATOR')).toBe(true);
+    expect(isTrustedAuthorAssociation('CONTRIBUTOR')).toBe(false);
+    expect(isTrustedAuthorAssociation(undefined)).toBe(false);
+  });
+});
+
+describe('comment command preflight', () => {
+  const githubContext = githubModule.context as unknown as {
+    eventName: string;
+    payload: Record<string, unknown>;
+    repo: { owner: string; repo: string };
+  };
+  const originalEnabled = process.env.INPUT_ENABLED;
+  const originalSkipLabel = process.env.INPUT_SKIP_LABEL;
+
+  beforeEach(() => {
+    setFailedMock.mockClear();
+    process.env.INPUT_ENABLED = 'true';
+    process.env.INPUT_SKIP_LABEL = 'skip-eval';
+    githubContext.eventName = 'pull_request';
+    githubContext.payload = { pull_request: { number: 42, labels: [] } };
+  });
+
+  afterEach(() => {
+    githubContext.eventName = 'pull_request';
+    githubContext.payload = { pull_request: { number: 42, labels: [] } };
+
+    if (originalEnabled !== undefined) {
+      process.env.INPUT_ENABLED = originalEnabled;
+    } else {
+      delete process.env.INPUT_ENABLED;
+    }
+    if (originalSkipLabel !== undefined) {
+      process.env.INPUT_SKIP_LABEL = originalSkipLabel;
+    } else {
+      delete process.env.INPUT_SKIP_LABEL;
+    }
+  });
+
+  test('runs for pull_request events', () => {
+    expect(shouldRunPreflight()).toBe(true);
+  });
+
+  test('skips issue comments without tessl commands', () => {
+    githubContext.eventName = 'issue_comment';
+    githubContext.payload = {
+      issue: { number: 42, pull_request: {}, labels: [] },
+      comment: { body: 'looks good', author_association: 'OWNER' },
+    };
+
+    expect(shouldRunPreflight()).toBe(false);
+    expect(setFailedMock).not.toHaveBeenCalled();
+  });
+
+  test('rejects tessl commands on non-PR issue comments', () => {
+    githubContext.eventName = 'issue_comment';
+    githubContext.payload = {
+      issue: { number: 42, labels: [] },
+      comment: { body: '/tessl eval plugins/foo', author_association: 'OWNER' },
+    };
+
+    expect(shouldRunPreflight()).toBe(false);
+    expect(setFailedMock).toHaveBeenCalledWith('Comment commands only work on pull requests.');
+  });
+
+  test('rejects untrusted issue comment authors', () => {
+    githubContext.eventName = 'issue_comment';
+    githubContext.payload = {
+      issue: { number: 42, pull_request: {}, labels: [] },
+      comment: { body: '/tessl eval plugins/foo', author_association: 'CONTRIBUTOR' },
+    };
+
+    expect(shouldRunPreflight()).toBe(false);
+    expect(setFailedMock).toHaveBeenCalledWith(
+      'Comment command is restricted to repo collaborators (got author_association CONTRIBUTOR).',
+    );
+  });
+
+  test('runs trusted issue comment commands', () => {
+    githubContext.eventName = 'issue_comment';
+    githubContext.payload = {
+      issue: { number: 42, pull_request: {}, labels: [] },
+      comment: { body: '/tessl scenarios plugins/foo', author_association: 'MEMBER' },
+    };
+
+    expect(shouldRunPreflight()).toBe(true);
   });
 });
 
@@ -211,6 +329,41 @@ describe('getChangedSkillFiles', () => {
     await expect(getChangedSkillFiles('.')).rejects.toThrow(
       'GITHUB_TOKEN is required',
     );
+  });
+});
+
+describe('getChangedEvalTargetFiles', () => {
+  const originalToken = process.env.GITHUB_TOKEN;
+
+  beforeEach(() => {
+    process.env.GITHUB_TOKEN = 'fake-token';
+    listFilesMock.mockClear();
+  });
+
+  afterEach(() => {
+    if (originalToken !== undefined) {
+      process.env.GITHUB_TOKEN = originalToken;
+    } else {
+      delete process.env.GITHUB_TOKEN;
+    }
+  });
+
+  test('includes SKILL.md and evals files', async () => {
+    listFilesMock.mockResolvedValueOnce({
+      data: [
+        { filename: 'plugins/a/SKILL.md', status: 'modified' },
+        { filename: 'plugins/a/evals/scenario.json', status: 'added' },
+        { filename: 'evals/root-scenario.json', status: 'modified' },
+        { filename: 'README.md', status: 'modified' },
+      ],
+    });
+
+    const result = await getChangedEvalTargetFiles('.');
+    expect(result).toEqual([
+      'plugins/a/SKILL.md',
+      'plugins/a/evals/scenario.json',
+      'evals/root-scenario.json',
+    ]);
   });
 });
 
