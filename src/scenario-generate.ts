@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { extractJson } from './skill-review.ts';
 import { tesslBin } from './tessl-bin.ts';
 
@@ -27,6 +28,17 @@ export interface ScenarioGenerateResult {
  */
 function tileNameFromPath(tilePath: string): string {
   return tilePath.replace(/\/+$/, '').split('/').pop() ?? tilePath;
+}
+
+function scenarioGenerateArgs(tilePath: string, count: number): string[] {
+  const args = [tesslBin(), 'scenario', 'generate', tilePath];
+
+  if (existsSync(join(tilePath, 'tile.json'))) {
+    args.push('-n', String(count));
+  }
+
+  args.push('--json');
+  return args;
 }
 
 /**
@@ -83,7 +95,7 @@ async function startOrAdoptGeneration(
   while (Date.now() < deadline) {
     // Try to start a new generation
     const genProc = Bun.spawn(
-      [tesslBin(), 'scenario', 'generate', tilePath, '-n', String(count), '--json'],
+      scenarioGenerateArgs(tilePath, count),
       { stdout: 'pipe', stderr: 'pipe' },
     );
 

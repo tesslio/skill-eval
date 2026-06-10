@@ -529,10 +529,13 @@ describe('formatEvalComment', () => {
 describe('generateAndDownloadScenarios', () => {
   let originalSpawn: typeof Bun.spawn;
   let originalTesslBin: string | undefined;
+  let tmp: string;
 
   beforeEach(async () => {
     originalSpawn = Bun.spawn;
     originalTesslBin = process.env.TESSL_BIN;
+    tmp = join(tmpdir(), `eval-scenario-test-${Date.now()}`);
+    mkdirSync(tmp, { recursive: true });
     // Use fast timings for tests
     const { setTimings } = await import('./scenario-generate.ts');
     setTimings(10, 10, 100); // 10ms poll, 10ms retry, 100ms retry timeout
@@ -546,26 +549,52 @@ describe('generateAndDownloadScenarios', () => {
     } else {
       delete process.env.TESSL_BIN;
     }
+    rmSync(tmp, { recursive: true, force: true });
     // Restore real timings
     const { setTimings } = await import('./scenario-generate.ts');
     setTimings(30_000, 30_000, 15 * 60_000);
   });
 
-  test('uses TESSL_BIN from setup-tessl when generating scenarios', async () => {
+  test('omits count flag for plugin-based scenario generation', async () => {
     const spawnMock = makeMockSpawn('no json', '', 0);
     process.env.TESSL_BIN = '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl';
+    const pluginDir = join(tmp, 'plugin');
+    mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
     // @ts-expect-error mock assignment
     Bun.spawn = spawnMock;
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
-    await generateAndDownloadScenarios('/tile', 3, 1);
+    await generateAndDownloadScenarios(pluginDir, 3, 1);
 
     const firstCall = spawnMock.mock.calls[0] as unknown[];
     expect(firstCall[0]).toEqual([
       '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl',
       'scenario',
       'generate',
-      '/tile',
+      pluginDir,
+      '--json',
+    ]);
+  });
+
+  test('keeps count flag for legacy tile-based scenario generation', async () => {
+    const spawnMock = makeMockSpawn('no json', '', 0);
+    process.env.TESSL_BIN = '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl';
+    const tileDir = join(tmp, 'tile');
+    mkdirSync(tileDir, { recursive: true });
+    writeFileSync(join(tileDir, 'tile.json'), '{}');
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    await generateAndDownloadScenarios(tileDir, 3, 1);
+
+    const firstCall = spawnMock.mock.calls[0] as unknown[];
+    expect(firstCall[0]).toEqual([
+      '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl',
+      'scenario',
+      'generate',
+      tileDir,
       '-n',
       '3',
       '--json',
