@@ -555,7 +555,7 @@ describe('generateAndDownloadScenarios', () => {
     setTimings(30_000, 30_000, 15 * 60_000);
   });
 
-  test('omits count flag for plugin-based scenario generation', async () => {
+  test('uses PR source and omits count flag for plugin-based scenario generation', async () => {
     const spawnMock = makeMockSpawn('no json', '', 0);
     process.env.TESSL_BIN = '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl';
     const pluginDir = join(tmp, 'plugin');
@@ -565,7 +565,7 @@ describe('generateAndDownloadScenarios', () => {
     Bun.spawn = spawnMock;
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
-    await generateAndDownloadScenarios(pluginDir, 3, 1);
+    await generateAndDownloadScenarios(pluginDir, 3, 1, { prNumber: 42 });
 
     const firstCall = spawnMock.mock.calls[0] as unknown[];
     expect(firstCall[0]).toEqual([
@@ -573,8 +573,25 @@ describe('generateAndDownloadScenarios', () => {
       'scenario',
       'generate',
       pluginDir,
+      '--prs=42',
       '--json',
     ]);
+  });
+
+  test('fails fast when plugin generation has no PR or commit source', async () => {
+    const spawnMock = makeMockSpawn('no json', '', 0);
+    const pluginDir = join(tmp, 'plugin-no-source');
+    mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    const result = await generateAndDownloadScenarios(pluginDir, 3, 1);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('requires PR or commit context');
+    expect(spawnMock).not.toHaveBeenCalled();
   });
 
   test('keeps count flag for legacy tile-based scenario generation', async () => {

@@ -144,7 +144,12 @@ async function main(): Promise<void> {
 
       for (const pluginDir of pluginsNeedingGeneration) {
         console.log(`  Generating ${scenarioCount} scenario(s) for ${pluginDir}...`);
-        const genResult = await generateAndDownloadScenarios(pluginDir, scenarioCount, evalTimeout);
+        const genResult = await generateAndDownloadScenarios(
+          pluginDir,
+          scenarioCount,
+          evalTimeout,
+          prNumber ? { prNumber } : {},
+        );
         if (!genResult.success) {
           genFailures.push(`  ${pluginDir}: ${genResult.error}`);
         } else {
@@ -204,7 +209,12 @@ async function generateCommitAndReportScenarios(
   prNumber: number,
 ): Promise<void> {
   console.log(`Generating ${scenarioCount} scenario(s) for ${pluginDir}...`);
-  const genResult = await generateAndDownloadScenarios(pluginDir, scenarioCount, evalTimeout);
+  const genResult = await generateAndDownloadScenarios(
+    pluginDir,
+    scenarioCount,
+    evalTimeout,
+    { prNumber },
+  );
   if (!genResult.success) {
     core.setFailed(`Scenario generation failed for ${pluginDir}: ${genResult.error}`);
     return;

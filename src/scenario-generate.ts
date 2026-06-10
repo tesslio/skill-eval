@@ -22,6 +22,11 @@ export interface ScenarioGenerateResult {
   error?: string;
 }
 
+export interface ScenarioGenerateOptions {
+  prNumber?: number;
+  commits?: string[];
+}
+
 /**
  * Extract the tile name from a tile path (last directory component).
  * e.g. "discovery" from "discovery" or "tiles/discovery" from "tiles/discovery"
@@ -30,11 +35,25 @@ function tileNameFromPath(tilePath: string): string {
   return tilePath.replace(/\/+$/, '').split('/').pop() ?? tilePath;
 }
 
-function scenarioGenerateArgs(tilePath: string, count: number): string[] {
+function isPluginRoot(tilePath: string): boolean {
+  return existsSync(join(tilePath, '.tessl-plugin', 'plugin.json'));
+}
+
+function scenarioGenerateArgs(
+  tilePath: string,
+  count: number,
+  options: ScenarioGenerateOptions,
+): string[] {
   const args = [tesslBin(), 'scenario', 'generate', tilePath];
 
   if (existsSync(join(tilePath, 'tile.json'))) {
     args.push('-n', String(count));
+  } else if (isPluginRoot(tilePath)) {
+    if (options.prNumber) {
+      args.push(`--prs=${options.prNumber}`);
+    } else if (options.commits?.length) {
+      args.push(`--commits=${options.commits.join(',')}`);
+    }
   }
 
   args.push('--json');
@@ -88,14 +107,23 @@ async function findInProgressGeneration(tileName: string): Promise<string | null
 async function startOrAdoptGeneration(
   tilePath: string,
   count: number,
+  options: ScenarioGenerateOptions,
 ): Promise<{ generationId: string } | { error: string }> {
   const tileName = tileNameFromPath(tilePath);
   const deadline = Date.now() + GENERATE_RETRY_TIMEOUT_MS;
 
+  if (isPluginRoot(tilePath) && !options.prNumber && !options.commits?.length) {
+    return {
+      error:
+        'Plugin scenario generation requires PR or commit context. ' +
+        'Run from a pull request or provide commits for tessl scenario generate.',
+    };
+  }
+
   while (Date.now() < deadline) {
     // Try to start a new generation
     const genProc = Bun.spawn(
-      scenarioGenerateArgs(tilePath, count),
+      scenarioGenerateArgs(tilePath, count, options),
       { stdout: 'pipe', stderr: 'pipe' },
     );
 
@@ -150,6 +178,7 @@ export async function generateAndDownloadScenarios(
   tilePath: string,
   count: number,
   timeoutMinutes: number,
+  options: ScenarioGenerateOptions = {},
 ): Promise<ScenarioGenerateResult> {
   const errorResult = (error: string): ScenarioGenerateResult => ({
     tilePath,
@@ -159,7 +188,7 @@ export async function generateAndDownloadScenarios(
   });
 
   // 1. Start generation (or adopt an existing in-progress one)
-  const startResult = await startOrAdoptGeneration(tilePath, count);
+  const startResult = await startOrAdoptGeneration(tilePath, count, options);
   if ('error' in startResult) {
     return errorResult(startResult.error);
   }
