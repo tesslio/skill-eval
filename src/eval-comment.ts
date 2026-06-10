@@ -3,6 +3,8 @@ import type { EvalResult } from './eval-types.ts';
 import { getPullRequestNumber } from './github-context.ts';
 
 const EVAL_COMMENT_MARKER = '<!-- tessl-skill-eval -->';
+const GUIDE_COMMENT_MARKER = '<!-- tessl-skill-eval-guide -->';
+const COMMAND_COMMENT_MARKER = '<!-- tessl-skill-eval-command -->';
 
 function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|>~]/g, '\\$&');
@@ -29,12 +31,73 @@ function evalScoreBadge(score: number): string {
   return `![eval score](https://img.shields.io/badge/eval_score-${score}%25-${color})`;
 }
 
+function displayPath(path: string): string {
+  return path.replace(/^\.\//, '');
+}
+
+function actionRunUrl(): string | null {
+  const serverUrl = process.env.GITHUB_SERVER_URL ?? 'https://github.com';
+  const repository = process.env.GITHUB_REPOSITORY;
+  const runId = process.env.GITHUB_RUN_ID;
+  if (!repository || !runId) return null;
+  return `${serverUrl}/${repository}/actions/runs/${runId}`;
+}
+
+async function postOrUpdateMarkedComment(
+  marker: string,
+  body: string,
+  prNumber: number | null,
+): Promise<void> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    throw new Error('GITHUB_TOKEN is required to post PR comments');
+  }
+
+  if (prNumber === null) {
+    throw new Error('No pull request context found');
+  }
+
+  const octokit = github.getOctokit(token);
+  let existing: { id: number; body?: string | null } | undefined;
+  let commentPage = 1;
+
+  while (!existing) {
+    const { data: comments } = await octokit.rest.issues.listComments({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      issue_number: prNumber,
+      per_page: 100,
+      page: commentPage,
+    });
+
+    existing = comments.find((c) => c.body?.includes(marker));
+    if (comments.length < 100) break;
+    commentPage++;
+  }
+
+  if (existing) {
+    await octokit.rest.issues.updateComment({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      comment_id: existing.id,
+      body,
+    });
+  } else {
+    await octokit.rest.issues.createComment({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      issue_number: prNumber,
+      body,
+    });
+  }
+}
+
 export function formatEvalComment(results: EvalResult[], failOnRegression: boolean): string {
   const sections = results.map((result) => {
-    const displayPath = result.tilePath.replace(/^\.\//, '');
+    const resultPath = displayPath(result.tilePath);
 
     if (result.error) {
-      return `### \`${displayPath}\`\n\n> ⚠️ **Error:** ${escapeMarkdown(result.error)}\n`;
+      return `### \`${resultPath}\`\n\n> ⚠️ **Error:** ${escapeMarkdown(result.error)}\n`;
     }
 
     const hasRegression = result.scenarios.some((s) => s.delta < 0);
@@ -43,7 +106,7 @@ export function formatEvalComment(results: EvalResult[], failOnRegression: boole
 
     const evalLink = result.runId ? `\n[View eval run on Tessl](https://tessl.io/eval-runs/${result.runId})\n` : '';
 
-    let body = `### \`${displayPath}\`\n${badge}\n${evalLink}`;
+    let body = `### \`${resultPath}\`\n${badge}\n${evalLink}`;
 
     if (result.scenarios.length > 0) {
       body += '\n| Scenario | Baseline | With Context | Delta |\n';
@@ -85,6 +148,109 @@ export function formatEvalComment(results: EvalResult[], failOnRegression: boole
   ].join('\n');
 
   return `${EVAL_COMMENT_MARKER}\n## 🧪 Tessl Eval Results\n\n${sections.join('\n---\n\n')}\n${footer}`;
+}
+
+export function formatEvalGuideComment(pluginDirs: string[]): string {
+  const paths = pluginDirs.map(displayPath);
+  const primaryPath = paths[0] ?? 'path/to/plugin';
+  const detectedPaths = paths.map((path) => `- \`${path}\``).join('\n');
+
+  return [
+    GUIDE_COMMENT_MARKER,
+    '## Tessl Skill Eval',
+    '',
+    'I found changed skill content, but no committed eval scenarios yet.',
+    '',
+    'Suggested flow:',
+    '',
+    `- Comment \`/tessl scenarios ${primaryPath}\` to generate editable scenarios.`,
+    '- Review, edit, or delete the generated `evals/` files directly in this PR.',
+    `- Comment \`/tessl eval ${primaryPath}\` to run evals against the reviewed scenarios.`,
+    '',
+    'Detected plugin paths:',
+    detectedPaths || `- \`${primaryPath}\``,
+  ].join('\n');
+}
+
+export type CommandStatus = 'running' | 'succeeded' | 'failed';
+
+export interface CommandStatusCommentOptions {
+  kind: 'scenarios' | 'eval';
+  pluginDir: string;
+  status: CommandStatus;
+  detail?: string;
+  generationId?: string;
+  commitSha?: string;
+}
+
+export function formatCommandStatusComment(options: CommandStatusCommentOptions): string {
+  const path = displayPath(options.pluginDir);
+  const command = `/tessl ${options.kind} ${path}`;
+  const runUrl = actionRunUrl();
+  const runLine = runUrl ? `\nAction run: [${process.env.GITHUB_RUN_ID}](${runUrl})\n` : '';
+
+  if (options.status === 'running' && options.kind === 'scenarios') {
+    return [
+      COMMAND_COMMENT_MARKER,
+      '## Tessl command received',
+      '',
+      `Running \`${command}\`.`,
+      runLine,
+      'I am generating scenarios now. If generation succeeds, I will commit editable files under:',
+      '',
+      `\`${path}/evals/\``,
+      '',
+      'Then you can review, edit, or delete them directly in this PR before running evals.',
+    ].join('\n');
+  }
+
+  if (options.status === 'running') {
+    return [
+      COMMAND_COMMENT_MARKER,
+      '## Tessl command received',
+      '',
+      `Running \`${command}\`.`,
+      runLine,
+      'I will update the eval result comment when the run finishes.',
+    ].join('\n');
+  }
+
+  if (options.status === 'succeeded' && options.kind === 'scenarios') {
+    return [
+      COMMAND_COMMENT_MARKER,
+      '## Tessl scenarios generated',
+      '',
+      `Generated editable scenarios in \`${path}/evals/\` and committed them to this PR (${options.commitSha ?? 'commit created'}).`,
+      '',
+      'Next steps:',
+      '',
+      `- Review, edit, or delete the generated files in \`${path}/evals/\`.`,
+      `- Comment \`/tessl eval ${path}\` when you are ready to run evals.`,
+      '',
+      options.generationId ? `<sub>Scenario generation: ${options.generationId}</sub>` : '',
+    ].filter(Boolean).join('\n');
+  }
+
+  if (options.status === 'succeeded') {
+    return [
+      COMMAND_COMMENT_MARKER,
+      '## Tessl eval complete',
+      '',
+      `Finished \`${command}\`.`,
+      '',
+      'I updated the Tessl eval result comment on this PR.',
+    ].join('\n');
+  }
+
+  return [
+    COMMAND_COMMENT_MARKER,
+    '## Tessl command failed',
+    '',
+    `Command: \`${command}\``,
+    '',
+    options.detail ? `Reason: ${escapeMarkdown(options.detail)}` : 'Reason: unknown failure',
+    runLine,
+  ].join('\n');
 }
 
 export async function postOrUpdateEvalComment(
@@ -140,39 +306,39 @@ export async function postOrUpdateEvalComment(
   }
 }
 
+export async function postOrUpdateEvalGuideComment(
+  pluginDirs: string[],
+  prNumber = getPullRequestNumber(),
+): Promise<void> {
+  await postOrUpdateMarkedComment(
+    GUIDE_COMMENT_MARKER,
+    formatEvalGuideComment(pluginDirs),
+    prNumber,
+  );
+}
+
+export async function postOrUpdateCommandStatusComment(
+  options: CommandStatusCommentOptions,
+  prNumber = getPullRequestNumber(),
+): Promise<void> {
+  await postOrUpdateMarkedComment(
+    COMMAND_COMMENT_MARKER,
+    formatCommandStatusComment(options),
+    prNumber,
+  );
+}
+
 export async function postGeneratedScenariosComment(
   pluginDir: string,
   generationId: string,
   commitSha: string,
   prNumber = getPullRequestNumber(),
 ): Promise<void> {
-  const token = process.env.GITHUB_TOKEN;
-  if (!token) {
-    throw new Error('GITHUB_TOKEN is required to post scenario comments');
-  }
-  if (prNumber === null) {
-    throw new Error('No pull request context found');
-  }
-
-  const octokit = github.getOctokit(token);
-  const evalsDir = `${pluginDir.replace(/^\.\//, '')}/evals`;
-  const body = [
-    '## Tessl scenarios generated',
-    '',
-    `Generated editable scenarios in \`${evalsDir}\` and committed them to this PR (${commitSha}).`,
-    '',
-    'Next steps:',
-    '',
-    `- Review or edit the generated scenario files in \`${evalsDir}\`.`,
-    `- Comment \`/tessl eval ${pluginDir.replace(/^\.\//, '')}\` when you are ready to run evals.`,
-    '',
-    `<sub>Scenario generation: ${generationId}</sub>`,
-  ].join('\n');
-
-  await octokit.rest.issues.createComment({
-    owner: github.context.repo.owner,
-    repo: github.context.repo.repo,
-    issue_number: prNumber,
-    body,
+  await postOrUpdateCommandStatusComment({
+    kind: 'scenarios',
+    pluginDir,
+    status: 'succeeded',
+    generationId,
+    commitSha,
   });
 }

@@ -520,6 +520,28 @@ describe('formatEvalComment', () => {
     expect(body).toContain('⚠️');
     expect(body).toContain('Auth failed');
   });
+
+  test('formats first-run guidance with scenario and eval commands', async () => {
+    const { formatEvalGuideComment } = await import('./eval-comment.ts');
+    const body = formatEvalGuideComment(['plugins/my-plugin']);
+
+    expect(body).toContain('/tessl scenarios plugins/my-plugin');
+    expect(body).toContain('/tessl eval plugins/my-plugin');
+    expect(body).toContain('evals/');
+  });
+
+  test('formats scenario command acknowledgement', async () => {
+    const { formatCommandStatusComment } = await import('./eval-comment.ts');
+    const body = formatCommandStatusComment({
+      kind: 'scenarios',
+      pluginDir: 'plugins/my-plugin',
+      status: 'running',
+    });
+
+    expect(body).toContain('Tessl command received');
+    expect(body).toContain('/tessl scenarios plugins/my-plugin');
+    expect(body).toContain('plugins/my-plugin/evals/');
+  });
 });
 
 // ---------------------------------------------------------------------------

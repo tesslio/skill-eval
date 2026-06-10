@@ -4,7 +4,12 @@ import { existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { getChangedEvalTargetFiles } from './changed-files.ts';
 import { parseTesslCommentCommand, isTrustedAuthorAssociation } from './comment-command.ts';
-import { postGeneratedScenariosComment, postOrUpdateEvalComment } from './eval-comment.ts';
+import {
+  postGeneratedScenariosComment,
+  postOrUpdateCommandStatusComment,
+  postOrUpdateEvalComment,
+  postOrUpdateEvalGuideComment,
+} from './eval-comment.ts';
 import { runEval } from './eval-run.ts';
 import { findPluginDirs, findPluginDirsWithEvals, resolveRequestedPluginDir } from './find-plugins.ts';
 import { commitGeneratedScenarios } from './git-utils.ts';
@@ -81,11 +86,24 @@ async function main(): Promise<void> {
     }
 
     if (command.kind === 'scenarios') {
+      await postCommandStatusSafely({
+        kind: 'scenarios',
+        pluginDir,
+        status: 'running',
+      }, prNumber);
       await generateCommitAndReportScenarios(pluginDir, scenarioCount, evalTimeout, prNumber);
       return;
     }
 
     if (!hasEvalsDir(pluginDir)) {
+      await postCommandStatusSafely({
+        kind: 'eval',
+        pluginDir,
+        status: 'failed',
+        detail:
+          `No eval scenarios found. Comment \`/tessl scenarios ${pluginDir.replace(/^\.\//, '')}\` ` +
+          'to generate editable scenarios first.',
+      }, prNumber);
       core.setFailed(
         `No eval scenarios found for ${pluginDir}. ` +
         `Comment \`/tessl scenarios ${pluginDir.replace(/^\.\//, '')}\` to generate editable scenarios first.`,
@@ -93,7 +111,21 @@ async function main(): Promise<void> {
       return;
     }
 
+    await postCommandStatusSafely({
+      kind: 'eval',
+      pluginDir,
+      status: 'running',
+    }, prNumber);
     const evalResults = await runEvalAndReport([pluginDir], evalWorkspace, evalAgent, evalTimeout, shouldComment, failOnRegression, prNumber);
+    const evalErrors = evalResults
+      .filter((result) => result.error)
+      .map((result) => `${result.tilePath}: ${result.error}`);
+    await postCommandStatusSafely({
+      kind: 'eval',
+      pluginDir,
+      status: evalErrors.length > 0 ? 'failed' : 'succeeded',
+      detail: evalErrors.join('\n'),
+    }, prNumber);
     failForRegressions(evalResults, failOnRegression);
     return;
   }
@@ -137,6 +169,14 @@ async function main(): Promise<void> {
         `${pluginsNeedingGeneration.length} plugin(s) have no evals/ directory: ${pluginsNeedingGeneration.join(', ')}. ` +
         `Set eval-generate-scenarios: true to auto-generate scenarios for these plugins.`,
       );
+      if (shouldComment && prNumber !== null) {
+        try {
+          await postOrUpdateEvalGuideComment(pluginsNeedingGeneration, prNumber);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          core.warning(`Could not post eval guide PR comment: ${msg}`);
+        }
+      }
     } else {
       console.log(`Generating scenarios for ${pluginsNeedingGeneration.length} plugin(s) without evals/...`);
 
@@ -216,6 +256,12 @@ async function generateCommitAndReportScenarios(
     { prNumber },
   );
   if (!genResult.success) {
+    await postCommandStatusSafely({
+      kind: 'scenarios',
+      pluginDir,
+      status: 'failed',
+      detail: genResult.error,
+    }, prNumber);
     core.setFailed(`Scenario generation failed for ${pluginDir}: ${genResult.error}`);
     return;
   }
@@ -229,7 +275,25 @@ async function generateCommitAndReportScenarios(
     await postGeneratedScenariosComment(pluginDir, genResult.generationId, commitSha, prNumber);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
+    await postCommandStatusSafely({
+      kind: 'scenarios',
+      pluginDir,
+      status: 'failed',
+      detail: `Generated scenarios, but could not commit them to the PR branch: ${msg}`,
+    }, prNumber);
     core.setFailed(`Generated scenarios, but could not commit them to the PR branch: ${msg}`);
+  }
+}
+
+async function postCommandStatusSafely(
+  options: Parameters<typeof postOrUpdateCommandStatusComment>[0],
+  prNumber: number,
+): Promise<void> {
+  try {
+    await postOrUpdateCommandStatusComment(options, prNumber);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    core.warning(`Could not post Tessl command status comment: ${msg}`);
   }
 }
 
