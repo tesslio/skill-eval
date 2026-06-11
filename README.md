@@ -8,7 +8,7 @@ Use it to:
 - Review or edit the generated `evals/` files directly in the PR.
 - Comment `/tessl eval path/to/skill` to run evals against the current PR head.
 
-Requires a `TESSL_TOKEN` to authenticate with the Tessl API. The GitHub-provided `GITHUB_TOKEN` is used for PR comments and, when allowed, committing generated scenarios back to the PR branch.
+Requires a `TESSL_TOKEN` to authenticate with the Tessl API. The token must have access to the configured `eval-workspace`; scenario generation uploads the checked-out plugin before committing generated `evals/` files back to the PR. The GitHub-provided `GITHUB_TOKEN` is used for PR comments and, when allowed, committing generated scenarios back to the PR branch.
 
 ## Usage
 
@@ -194,6 +194,8 @@ Evals require a Tessl API key. To add it as a GitHub repository secret:
 5. Click **Add secret**
 
 Then reference it in your workflow as `${{ secrets.TESSL_TOKEN }}`.
+
+Use a key for the same Tessl workspace you pass as `eval-workspace`. If scenario generation fails with `403 Forbidden` while uploading, the token usually does not have access to that workspace.
 
 ## Local development
 

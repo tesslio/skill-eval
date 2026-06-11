@@ -530,6 +530,8 @@ describe('formatEvalComment', () => {
     expect(body).toContain('/tessl scenarios plugins/my-plugin');
     expect(body).toContain('/tessl eval plugins/my-plugin');
     expect(body).toContain('evals/');
+    expect(body).toContain('TESSL_TOKEN');
+    expect(body).toContain('eval-workspace');
   });
 
   test('formats scenario command acknowledgement', async () => {
@@ -543,6 +545,7 @@ describe('formatEvalComment', () => {
     expect(body).toContain('Tessl command received');
     expect(body).toContain('/tessl scenarios plugins/my-plugin');
     expect(body).toContain('plugins/my-plugin/evals/');
+    expect(body).toContain('TESSL_TOKEN');
   });
 
   test('formats no-op scenario generation when evals already match', async () => {
@@ -689,6 +692,30 @@ describe('generateAndDownloadScenarios', () => {
     const result = await generateAndDownloadScenarios(tileDir, 3, 1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('retries');
+  });
+
+  test('fails fast with workspace guidance when upload is forbidden', async () => {
+    const spawnMock = makeMockSpawn(
+      '',
+      '✖ Failed to generate scenarios\n✘ Failed to get upload URL: 403 Forbidden',
+      1,
+    );
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+    const pluginDir = join(tmp, 'forbidden-plugin');
+    mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    const result = await generateAndDownloadScenarios(pluginDir, 1, 1, {
+      workspace: 'bapfernandez',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('403 Forbidden');
+    expect(result.error).toContain('TESSL_TOKEN');
+    expect(result.error).toContain('bapfernandez');
+    expect(spawnMock).toHaveBeenCalledTimes(1);
   });
 
   test('returns error when generate output has no id', async () => {

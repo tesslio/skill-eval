@@ -167,6 +167,11 @@ export function formatEvalGuideComment(pluginDirs: string[]): string {
     '- Review, edit, or delete the generated `evals/` files directly in this PR.',
     `- Comment \`/tessl eval ${primaryPath}\` to run evals against the reviewed scenarios.`,
     '',
+    'Setup note:',
+    '',
+    '- `TESSL_TOKEN` must be a Tessl API key with access to the configured `eval-workspace`.',
+    '- Scenario generation uploads the checked-out plugin before committing `evals/` files back to this PR.',
+    '',
     'Detected plugin paths:',
     detectedPaths || `- \`${primaryPath}\``,
   ].join('\n');
@@ -200,6 +205,8 @@ export function formatCommandStatusComment(options: CommandStatusCommentOptions)
       'I am generating scenarios now. If generation succeeds, I will commit editable files under:',
       '',
       `\`${path}/evals/\``,
+      '',
+      'This uses the configured Tessl workspace and the `TESSL_TOKEN` secret for upload/generation.',
       '',
       'Then you can review, edit, or delete them directly in this PR before running evals.',
     ].join('\n');

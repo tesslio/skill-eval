@@ -69,6 +69,22 @@ function scenarioGenerateArgs(
   return args;
 }
 
+function fatalScenarioGenerateError(output: string, options: ScenarioGenerateOptions): string | null {
+  if (!/403 Forbidden|Failed to get upload URL/i.test(output)) {
+    return null;
+  }
+
+  const workspace = options.workspace?.trim();
+  const workspaceHint = workspace
+    ? `configured eval-workspace \`${workspace}\``
+    : 'configured `eval-workspace`';
+
+  return [
+    'Tessl could not upload the plugin for scenario generation: 403 Forbidden.',
+    `Check that \`TESSL_TOKEN\` is a Tessl API key with access to the ${workspaceHint}.`,
+  ].join(' ');
+}
+
 /**
  * Check `tessl scenario list --mine --json` for an in-progress generation
  * that matches this tile. Returns the generation ID if found, null otherwise.
@@ -175,6 +191,11 @@ async function startOrAdoptGeneration(
     const stderrTrimmed = genStderr.trim().replace(/\n/g, ' | ');
     core.info(`tessl scenario generate failed (exit ${genExit}): ${stderrTrimmed}`);
     core.info(`stdout was: ${genStdout.trim().slice(0, 200) || '(empty)'}`);
+
+    const fatalError = fatalScenarioGenerateError(`${genStderr}\n${genStdout}`, options);
+    if (fatalError) {
+      return { error: fatalError };
+    }
 
     const existingId = await findInProgressGeneration(tileName);
     if (existingId) {
