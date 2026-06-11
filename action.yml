@@ -62,6 +62,7 @@ runs:
       env:
         INPUT_ENABLED: ${{ inputs.enabled }}
         INPUT_SKIP_LABEL: ${{ inputs.skip-label }}
+        GITHUB_TOKEN: ${{ github.token }}
     - id: setup-tessl
       if: steps.preflight.outputs.should-run == 'true' && inputs.test-mode != 'true'
       uses: tesslio/setup-tessl@v2

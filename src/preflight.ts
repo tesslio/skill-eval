@@ -42,6 +42,46 @@ export function shouldRunPreflight(): boolean {
   return true;
 }
 
+export async function acknowledgeCommentCommand(): Promise<void> {
+  if (github.context.eventName !== 'issue_comment') {
+    return;
+  }
+
+  const comment = github.context.payload.comment as { id?: unknown; body?: unknown } | undefined;
+  const command = parseTesslCommentCommand(typeof comment?.body === 'string' ? comment.body : undefined);
+  if (!command) {
+    return;
+  }
+
+  if (typeof comment?.id !== 'number') {
+    core.warning('Could not add eyes reaction: issue comment id was missing.');
+    return;
+  }
+
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    core.warning('Could not add eyes reaction: GITHUB_TOKEN is missing.');
+    return;
+  }
+
+  try {
+    const octokit = github.getOctokit(token);
+    await octokit.rest.reactions.createForIssueComment({
+      owner: github.context.repo.owner,
+      repo: github.context.repo.repo,
+      comment_id: comment.id,
+      content: 'eyes',
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    core.warning(`Could not add eyes reaction to Tessl command comment: ${msg}`);
+  }
+}
+
 if (import.meta.main) {
-  core.setOutput('should-run', shouldRunPreflight() ? 'true' : 'false');
+  const shouldRun = shouldRunPreflight();
+  core.setOutput('should-run', shouldRun ? 'true' : 'false');
+  if (shouldRun) {
+    await acknowledgeCommentCommand();
+  }
 }

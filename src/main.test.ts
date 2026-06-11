@@ -26,6 +26,7 @@ const updateCommentMock = mock(() => Promise.resolve());
 const listCommentsMock = mock(() =>
   Promise.resolve({ data: [] as Array<{ id: number; body: string }> }),
 );
+const createReactionMock = mock(() => Promise.resolve());
 
 mock.module('@actions/github', () => ({
   context: {
@@ -41,6 +42,9 @@ mock.module('@actions/github', () => ({
         createComment: createCommentMock,
         updateComment: updateCommentMock,
       },
+      reactions: {
+        createForIssueComment: createReactionMock,
+      },
     },
   }),
 }));
@@ -51,7 +55,7 @@ const { runSkillReview, extractJson } = await import('./skill-review.ts');
 const { postOrUpdateComment } = await import('./comment.ts');
 const { parsePositiveInt } = await import('./main.ts');
 const { parseTesslCommentCommand, isTrustedAuthorAssociation } = await import('./comment-command.ts');
-const { shouldRunPreflight } = await import('./preflight.ts');
+const { shouldRunPreflight, acknowledgeCommentCommand } = await import('./preflight.ts');
 const githubModule = await import('@actions/github');
 
 // ---------------------------------------------------------------------------
@@ -128,11 +132,14 @@ describe('comment command preflight', () => {
   };
   const originalEnabled = process.env.INPUT_ENABLED;
   const originalSkipLabel = process.env.INPUT_SKIP_LABEL;
+  const originalGithubToken = process.env.GITHUB_TOKEN;
 
   beforeEach(() => {
     setFailedMock.mockClear();
+    createReactionMock.mockClear();
     process.env.INPUT_ENABLED = 'true';
     process.env.INPUT_SKIP_LABEL = 'skip-eval';
+    process.env.GITHUB_TOKEN = 'github-token';
     githubContext.eventName = 'pull_request';
     githubContext.payload = { pull_request: { number: 42, labels: [] } };
   });
@@ -150,6 +157,11 @@ describe('comment command preflight', () => {
       process.env.INPUT_SKIP_LABEL = originalSkipLabel;
     } else {
       delete process.env.INPUT_SKIP_LABEL;
+    }
+    if (originalGithubToken !== undefined) {
+      process.env.GITHUB_TOKEN = originalGithubToken;
+    } else {
+      delete process.env.GITHUB_TOKEN;
     }
   });
 
@@ -200,6 +212,43 @@ describe('comment command preflight', () => {
     };
 
     expect(shouldRunPreflight()).toBe(true);
+  });
+
+  test('adds eyes reaction to accepted issue comment command', async () => {
+    githubContext.eventName = 'issue_comment';
+    githubContext.payload = {
+      issue: { number: 42, pull_request: {}, labels: [] },
+      comment: {
+        id: 123,
+        body: '/tessl scenarios plugins/foo',
+        author_association: 'MEMBER',
+      },
+    };
+
+    await acknowledgeCommentCommand();
+
+    expect(createReactionMock).toHaveBeenCalledWith({
+      owner: 'test-owner',
+      repo: 'test-repo',
+      comment_id: 123,
+      content: 'eyes',
+    });
+  });
+
+  test('does not add reaction when comment has no tessl command', async () => {
+    githubContext.eventName = 'issue_comment';
+    githubContext.payload = {
+      issue: { number: 42, pull_request: {}, labels: [] },
+      comment: {
+        id: 123,
+        body: 'looks good',
+        author_association: 'MEMBER',
+      },
+    };
+
+    await acknowledgeCommentCommand();
+
+    expect(createReactionMock).not.toHaveBeenCalled();
   });
 });
 
