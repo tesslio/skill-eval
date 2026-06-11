@@ -40,6 +40,10 @@ function isPluginRoot(tilePath: string): boolean {
   return existsSync(join(tilePath, '.tessl-plugin', 'plugin.json'));
 }
 
+function isLegacyTileRoot(tilePath: string): boolean {
+  return existsSync(join(tilePath, 'tile.json'));
+}
+
 function scenarioGenerateArgs(
   tilePath: string,
   count: number,
@@ -47,9 +51,9 @@ function scenarioGenerateArgs(
 ): string[] {
   const args = [tesslBin(), 'scenario', 'generate', tilePath];
 
-  if (existsSync(join(tilePath, 'tile.json'))) {
+  if (isLegacyTileRoot(tilePath) || isPluginRoot(tilePath)) {
     args.push('-n', String(count));
-  } else if (isPluginRoot(tilePath)) {
+  } else {
     if (options.workspace) {
       args.push('--workspace', options.workspace);
     }
@@ -117,18 +121,20 @@ async function startOrAdoptGeneration(
   const tileName = tileNameFromPath(tilePath);
   const deadline = Date.now() + GENERATE_RETRY_TIMEOUT_MS;
 
-  if (isPluginRoot(tilePath) && !options.prNumber && !options.commits?.length) {
+  const localPluginOrTile = isPluginRoot(tilePath) || isLegacyTileRoot(tilePath);
+
+  if (!localPluginOrTile && !options.prNumber && !options.commits?.length) {
     return {
       error:
-        'Plugin scenario generation requires PR or commit context. ' +
+        'Repository scenario generation requires PR or commit context. ' +
         'Run from a pull request or provide commits for tessl scenario generate.',
     };
   }
 
-  if (isPluginRoot(tilePath) && !options.workspace) {
+  if (!localPluginOrTile && !options.workspace) {
     return {
       error:
-        'Plugin scenario generation requires eval-workspace. ' +
+        'Repository scenario generation requires eval-workspace. ' +
         'Set eval-workspace in your GitHub Actions workflow.',
     };
   }

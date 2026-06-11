@@ -140,6 +140,7 @@ export async function runEval(
   workspace: string,
   agent: string,
   timeoutMinutes: number,
+  runs: number,
 ): Promise<EvalResult> {
   const errorResult = (error: string): EvalResult => ({
     tilePath,
@@ -150,7 +151,17 @@ export async function runEval(
     error,
   });
 
-  const args = [tesslBin(), 'eval', 'run', tilePath, '--agent', agent, '--json'];
+  const args = [
+    tesslBin(),
+    'eval',
+    'run',
+    tilePath,
+    '--agent',
+    agent,
+    '--runs',
+    String(runs),
+    '--json',
+  ];
   if (workspace) {
     args.splice(4, 0, '--workspace', workspace);
   }

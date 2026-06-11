@@ -273,7 +273,7 @@ describe('runEval', () => {
     Bun.spawn = spawnMock;
 
     const { runEval } = await import('./eval-run.ts');
-    await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1);
+    await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
 
     const firstCall = spawnMock.mock.calls[0] as unknown[];
     expect(firstCall[0]).toEqual([
@@ -285,6 +285,8 @@ describe('runEval', () => {
       'my-ws',
       '--agent',
       'claude:claude-sonnet-4-6',
+      '--runs',
+      '1',
       '--json',
     ]);
   });
@@ -301,7 +303,7 @@ describe('runEval', () => {
     Bun.spawn = makeMockSpawn('', 'auth failed', 1);
 
     const { runEval } = await import('./eval-run.ts');
-    const result = await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1);
+    const result = await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
     expect(result.status).toBe('failed');
     expect(result.error).toContain('auth failed');
   });
@@ -311,7 +313,7 @@ describe('runEval', () => {
     Bun.spawn = makeMockSpawn('no json here', '', 0);
 
     const { runEval } = await import('./eval-run.ts');
-    const result = await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1);
+    const result = await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
     expect(result.status).toBe('failed');
     expect(result.error).toContain('parse');
   });
@@ -321,7 +323,7 @@ describe('runEval', () => {
     Bun.spawn = makeMockSpawn('{"status": "pending"}', '', 0);
 
     const { runEval } = await import('./eval-run.ts');
-    const result = await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1);
+    const result = await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
     expect(result.status).toBe('failed');
     expect(result.error).toContain('id');
   });
@@ -593,7 +595,7 @@ describe('generateAndDownloadScenarios', () => {
     setTimings(30_000, 30_000, 15 * 60_000);
   });
 
-  test('uses workspace and PR source for plugin-based scenario generation', async () => {
+  test('passes count for plugin-based scenario generation', async () => {
     const spawnMock = makeMockSpawn('no json', '', 0);
     process.env.TESSL_BIN = '/runner/tool-cache/tessl/0.73.0/linux-x64/tessl';
     const pluginDir = join(tmp, 'plugin');
@@ -603,10 +605,7 @@ describe('generateAndDownloadScenarios', () => {
     Bun.spawn = spawnMock;
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
-    await generateAndDownloadScenarios(pluginDir, 3, 1, {
-      prNumber: 42,
-      workspace: 'bapfernandez',
-    });
+    await generateAndDownloadScenarios(pluginDir, 1, 1);
 
     const firstCall = spawnMock.mock.calls[0] as unknown[];
     expect(firstCall[0]).toEqual([
@@ -614,14 +613,13 @@ describe('generateAndDownloadScenarios', () => {
       'scenario',
       'generate',
       pluginDir,
-      '--workspace',
-      'bapfernandez',
-      '--prs=42',
+      '-n',
+      '1',
       '--json',
     ]);
   });
 
-  test('fails fast when plugin generation has no workspace', async () => {
+  test('allows plugin generation without workspace because local plugin is the source', async () => {
     const spawnMock = makeMockSpawn('no json', '', 0);
     const pluginDir = join(tmp, 'plugin-no-workspace');
     mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
@@ -633,11 +631,11 @@ describe('generateAndDownloadScenarios', () => {
     const result = await generateAndDownloadScenarios(pluginDir, 3, 1, { prNumber: 42 });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('requires eval-workspace');
-    expect(spawnMock).not.toHaveBeenCalled();
+    expect(result.error).toContain('parse');
+    expect(spawnMock).toHaveBeenCalled();
   });
 
-  test('fails fast when plugin generation has no PR or commit source', async () => {
+  test('allows plugin generation without PR because local plugin is the source', async () => {
     const spawnMock = makeMockSpawn('no json', '', 0);
     const pluginDir = join(tmp, 'plugin-no-source');
     mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
@@ -651,8 +649,8 @@ describe('generateAndDownloadScenarios', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain('requires PR or commit context');
-    expect(spawnMock).not.toHaveBeenCalled();
+    expect(result.error).toContain('parse');
+    expect(spawnMock).toHaveBeenCalled();
   });
 
   test('keeps count flag for legacy tile-based scenario generation', async () => {
@@ -683,9 +681,12 @@ describe('generateAndDownloadScenarios', () => {
     // All spawn calls return exit 1 — generate fails, list also fails
     // @ts-expect-error mock assignment
     Bun.spawn = makeMockSpawn('', 'server error', 1);
+    const tileDir = join(tmp, 'failing-tile');
+    mkdirSync(tileDir, { recursive: true });
+    writeFileSync(join(tileDir, 'tile.json'), '{}');
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
-    const result = await generateAndDownloadScenarios('/tile', 3, 1);
+    const result = await generateAndDownloadScenarios(tileDir, 3, 1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('retries');
   });
@@ -703,9 +704,12 @@ describe('generateAndDownloadScenarios', () => {
   test('returns error when generate output has no JSON', async () => {
     // @ts-expect-error mock assignment
     Bun.spawn = makeMockSpawn('no json', '', 0);
+    const tileDir = join(tmp, 'no-json-tile');
+    mkdirSync(tileDir, { recursive: true });
+    writeFileSync(join(tileDir, 'tile.json'), '{}');
 
     const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
-    const result = await generateAndDownloadScenarios('/tile', 3, 1);
+    const result = await generateAndDownloadScenarios(tileDir, 3, 1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('parse');
   });

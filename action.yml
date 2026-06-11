@@ -25,6 +25,9 @@ inputs:
   eval-timeout:
     description: 'Max minutes to wait for each eval run to complete'
     default: '45'
+  eval-runs:
+    description: 'Number of times to repeat each agent configuration per scenario'
+    default: '1'
   eval-fail-on-regression:
     description: 'Fail the check if any scenario scores worse with context than baseline'
     default: 'true'
@@ -76,6 +79,7 @@ runs:
         INPUT_EVAL_WORKSPACE: ${{ inputs.eval-workspace }}
         INPUT_EVAL_AGENT: ${{ inputs.eval-agent }}
         INPUT_EVAL_TIMEOUT: ${{ inputs.eval-timeout }}
+        INPUT_EVAL_RUNS: ${{ inputs.eval-runs }}
         INPUT_EVAL_FAIL_ON_REGRESSION: ${{ inputs.eval-fail-on-regression }}
         INPUT_EVAL_GENERATE_SCENARIOS: ${{ inputs.eval-generate-scenarios }}
         INPUT_EVAL_SCENARIO_COUNT: ${{ inputs.eval-scenario-count }}

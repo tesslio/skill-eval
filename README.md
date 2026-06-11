@@ -77,9 +77,10 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 | `path` | Root path to search for SKILL.md files | `.` |
 | `comment` | Whether to post results as a PR comment | `true` |
 | `cli-version` | Tessl CLI version to install, for example `0.73.0` or `latest` | `latest` |
-| `eval-workspace` | Tessl workspace name. Required for plugin-based scenario generation and recommended for evals. Optional only when legacy tiles set workspace in `tile.json`. | `''` |
+| `eval-workspace` | Tessl workspace name. Recommended for evals, and required when generating scenarios from repo PRs/commits instead of a checked-out plugin path. | `''` |
 | `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
 | `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |
+| `eval-runs` | Number of times to repeat each agent configuration per scenario | `1` |
 | `eval-fail-on-regression` | Fail the check if any scenario scores worse with context than baseline | `true` |
 | `eval-generate-scenarios` | Generate fresh scenarios for tiles without `evals/` | `false` |
 | `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
@@ -129,7 +130,7 @@ The recommended PR loop is comment-driven:
 
 Generated scenarios are committed as real PR files so reviewers can use normal GitHub review, suggestions, and diffs.
 
-For plugin-based repositories (`.tessl-plugin/plugin.json`), set `eval-workspace` in the workflow. Scenario generation uses that workspace plus the PR number to generate scenarios from the current PR context.
+For plugin-based repositories (`.tessl-plugin/plugin.json`), scenario generation runs against the checked-out PR head. Use `eval-scenario-count: 1` and `eval-runs: 1` for a small real smoke test.
 
 ### Testing the GitHub flow without Tessl eval cost
 
@@ -149,7 +150,8 @@ You can also generate scenarios automatically during pull request runs:
   with:
     eval-workspace: my-workspace
     eval-generate-scenarios: true
-    eval-scenario-count: 3
+    eval-scenario-count: 1
+    eval-runs: 1
     tessl-token: ${{ secrets.TESSL_TOKEN }}
 ```
 
