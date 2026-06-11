@@ -42,6 +42,7 @@ jobs:
 
       - uses: tesslio/skill-eval@main
         with:
+          eval-workspace: my-workspace
           tessl-token: ${{ secrets.TESSL_TOKEN }}
 ```
 
@@ -60,6 +61,7 @@ To pin the Tessl CLI version used for eval runs, add `cli-version`:
 ```yaml
 - uses: tesslio/skill-eval@main
   with:
+    eval-workspace: my-workspace
     cli-version: 0.73.0
     tessl-token: ${{ secrets.TESSL_TOKEN }}
 ```
@@ -75,7 +77,7 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 | `path` | Root path to search for SKILL.md files | `.` |
 | `comment` | Whether to post results as a PR comment | `true` |
 | `cli-version` | Tessl CLI version to install, for example `0.73.0` or `latest` | `latest` |
-| `eval-workspace` | Tessl workspace name. Optional when tiles set workspace in `tile.json`. | `''` |
+| `eval-workspace` | Tessl workspace name. Required for plugin-based scenario generation and recommended for evals. Optional only when legacy tiles set workspace in `tile.json`. | `''` |
 | `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
 | `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |
 | `eval-fail-on-regression` | Fail the check if any scenario scores worse with context than baseline | `true` |
@@ -125,6 +127,8 @@ The recommended PR loop is comment-driven:
 3. Comment `/tessl eval path/to/skill`.
 
 Generated scenarios are committed as real PR files so reviewers can use normal GitHub review, suggestions, and diffs.
+
+For plugin-based repositories (`.tessl-plugin/plugin.json`), set `eval-workspace` in the workflow. Scenario generation uses that workspace plus the PR number to generate scenarios from the current PR context.
 
 You can also generate scenarios automatically during pull request runs:
 

@@ -25,6 +25,7 @@ export interface ScenarioGenerateResult {
 export interface ScenarioGenerateOptions {
   prNumber?: number;
   commits?: string[];
+  workspace?: string;
 }
 
 /**
@@ -49,6 +50,10 @@ function scenarioGenerateArgs(
   if (existsSync(join(tilePath, 'tile.json'))) {
     args.push('-n', String(count));
   } else if (isPluginRoot(tilePath)) {
+    if (options.workspace) {
+      args.push('--workspace', options.workspace);
+    }
+
     if (options.prNumber) {
       args.push(`--prs=${options.prNumber}`);
     } else if (options.commits?.length) {
@@ -117,6 +122,14 @@ async function startOrAdoptGeneration(
       error:
         'Plugin scenario generation requires PR or commit context. ' +
         'Run from a pull request or provide commits for tessl scenario generate.',
+    };
+  }
+
+  if (isPluginRoot(tilePath) && !options.workspace) {
+    return {
+      error:
+        'Plugin scenario generation requires eval-workspace. ' +
+        'Set eval-workspace in your GitHub Actions workflow.',
     };
   }
 

@@ -91,7 +91,7 @@ async function main(): Promise<void> {
         pluginDir,
         status: 'running',
       }, prNumber);
-      await generateCommitAndReportScenarios(pluginDir, scenarioCount, evalTimeout, prNumber);
+      await generateCommitAndReportScenarios(pluginDir, scenarioCount, evalTimeout, evalWorkspace, prNumber);
       return;
     }
 
@@ -188,7 +188,10 @@ async function main(): Promise<void> {
           pluginDir,
           scenarioCount,
           evalTimeout,
-          prNumber ? { prNumber } : {},
+          {
+            ...(prNumber ? { prNumber } : {}),
+            ...(evalWorkspace ? { workspace: evalWorkspace } : {}),
+          },
         );
         if (!genResult.success) {
           genFailures.push(`  ${pluginDir}: ${genResult.error}`);
@@ -246,6 +249,7 @@ async function generateCommitAndReportScenarios(
   pluginDir: string,
   scenarioCount: number,
   evalTimeout: number,
+  evalWorkspace: string,
   prNumber: number,
 ): Promise<void> {
   console.log(`Generating ${scenarioCount} scenario(s) for ${pluginDir}...`);
@@ -253,7 +257,10 @@ async function generateCommitAndReportScenarios(
     pluginDir,
     scenarioCount,
     evalTimeout,
-    { prNumber },
+    {
+      prNumber,
+      ...(evalWorkspace ? { workspace: evalWorkspace } : {}),
+    },
   );
   if (!genResult.success) {
     await postCommandStatusSafely({
