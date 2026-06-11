@@ -84,6 +84,7 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 | `eval-generate-scenarios` | Generate fresh scenarios for tiles without `evals/` | `false` |
 | `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
 | `eval-commit-scenarios` | Commit generated scenarios back to the PR branch (requires `contents: write`) | `false` |
+| `test-mode` | Action development only. Uses mock scenarios and mock eval results without calling Tessl APIs. | `false` |
 | `tessl-token` | Tessl API token. Pass via secrets. | **(required)** |
 
 ## How it works
@@ -129,6 +130,17 @@ The recommended PR loop is comment-driven:
 Generated scenarios are committed as real PR files so reviewers can use normal GitHub review, suggestions, and diffs.
 
 For plugin-based repositories (`.tessl-plugin/plugin.json`), set `eval-workspace` in the workflow. Scenario generation uses that workspace plus the PR number to generate scenarios from the current PR context.
+
+### Testing the GitHub flow without Tessl eval cost
+
+For action development or E2E smoke tests, set `test-mode: true`. This skips Tessl API calls, creates mock `evals/` files, commits them to the PR, and posts mock eval results. Do not use this for production evals.
+
+```yaml
+- uses: tesslio/skill-eval@main
+  with:
+    test-mode: true
+    tessl-token: ${{ secrets.TESSL_TOKEN }}
+```
 
 You can also generate scenarios automatically during pull request runs:
 
