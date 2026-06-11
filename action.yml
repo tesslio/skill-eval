@@ -44,7 +44,7 @@ inputs:
     description: 'Action development only: use mock scenario generation and mock eval results without calling Tessl APIs.'
     default: 'false'
   cli-version:
-    description: 'Tessl CLI version to install (for example "0.73.0", or "latest")'
+    description: 'Tessl CLI version to install (for example "0.x.y", or "latest")'
     default: 'latest'
   tessl-token:
     description: 'Tessl API token for authentication. Pass via secrets.'

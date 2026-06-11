@@ -62,7 +62,7 @@ To pin the Tessl CLI version used for eval runs, add `cli-version`:
 - uses: tesslio/skill-eval@main
   with:
     eval-workspace: my-workspace
-    cli-version: 0.73.0
+    cli-version: 0.x.y
     tessl-token: ${{ secrets.TESSL_TOKEN }}
 ```
 
@@ -76,7 +76,7 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 | `skip-label` | PR label that skips eval even when enabled. Set empty to disable. | `skip-eval` |
 | `path` | Root path to search for SKILL.md files | `.` |
 | `comment` | Whether to post results as a PR comment | `true` |
-| `cli-version` | Tessl CLI version to install, for example `0.73.0` or `latest` | `latest` |
+| `cli-version` | Tessl CLI version to install, for example `0.x.y` or `latest` | `latest` |
 | `eval-workspace` | Tessl workspace name. Recommended for evals, and required when generating scenarios from repo PRs/commits instead of a checked-out plugin path. | `''` |
 | `eval-agent` | Agent:model pair for evals | `claude:claude-sonnet-4-6` |
 | `eval-timeout` | Max minutes to wait for each eval run to complete | `45` |
