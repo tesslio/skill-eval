@@ -247,6 +247,29 @@ function makeMockSpawn(stdout: string, stderr: string, exitCode: number) {
   }));
 }
 
+function makeMockSpawnSequence(responses: Array<{ stdout: string; stderr: string; exitCode: number }>) {
+  let index = 0;
+  return mock((..._args: unknown[]) => {
+    const response = responses[Math.min(index, responses.length - 1)]!;
+    index++;
+    return {
+      stdout: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(response.stdout));
+          controller.close();
+        },
+      }),
+      stderr: new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(response.stderr));
+          controller.close();
+        },
+      }),
+      exited: Promise.resolve(response.exitCode),
+    };
+  });
+}
+
 describe('runEval', () => {
   let originalSpawn: typeof Bun.spawn;
   let originalTesslBin: string | undefined;
@@ -716,6 +739,32 @@ describe('generateAndDownloadScenarios', () => {
     expect(result.error).toContain('TESSL_TOKEN');
     expect(result.error).toContain('bapfernandez');
     expect(spawnMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('returns actionable error when generation has no downloadable scenarios', async () => {
+    const spawnMock = makeMockSpawnSequence([
+      { stdout: '{"generationId": "gen-empty"}', stderr: '', exitCode: 0 },
+      { stdout: '{"status": "completed"}', stderr: '', exitCode: 0 },
+      {
+        stdout: '',
+        stderr: '\u001B[31m✖\u001B[39m No scenarios found\n✘ No scenarios found for generation gen-empty.',
+        exitCode: 1,
+      },
+    ]);
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+    const pluginDir = join(tmp, 'empty-plugin');
+    mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    const result = await generateAndDownloadScenarios(pluginDir, 1, 1);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('returned no downloadable scenarios');
+    expect(result.error).toContain('/tessl scenarios');
+    expect(result.error).toContain('gen-empty');
+    expect(result.error).not.toContain('\u001B');
   });
 
   test('returns error when generate output has no id', async () => {

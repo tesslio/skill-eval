@@ -85,6 +85,30 @@ function fatalScenarioGenerateError(output: string, options: ScenarioGenerateOpt
   ].join(' ');
 }
 
+function cleanCliOutput(output: string): string {
+  return output.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '').trim();
+}
+
+function scenarioDownloadError(
+  exitCode: number,
+  stderr: string,
+  generationId: string,
+  tilePath: string,
+): string {
+  const cleaned = cleanCliOutput(stderr);
+
+  if (/No scenarios found/i.test(cleaned)) {
+    return [
+      `Tessl completed scenario generation but returned no downloadable scenarios for \`${tilePath}\`.`,
+      'Make the skill more specific, with concrete behavior and expected outputs, then retry',
+      `\`/tessl scenarios ${tilePath}\`.`,
+      `Generation: ${generationId}`,
+    ].join(' ');
+  }
+
+  return `tessl scenario download failed (exit ${exitCode}): ${cleaned || 'unknown error'}`;
+}
+
 /**
  * Check `tessl scenario list --mine --json` for an in-progress generation
  * that matches this tile. Returns the generation ID if found, null otherwise.
@@ -304,7 +328,7 @@ export async function generateAndDownloadScenarios(
 
   const dlExit = await dlProc.exited;
   if (dlExit !== 0) {
-    return errorResult(`tessl scenario download failed (exit ${dlExit}): ${dlStderr}`);
+    return errorResult(scenarioDownloadError(dlExit, dlStderr, generationId, tilePath));
   }
 
   core.info(`Scenarios downloaded to ${evalsDir}`);
