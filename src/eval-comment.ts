@@ -181,6 +181,7 @@ export interface CommandStatusCommentOptions {
   detail?: string;
   generationId?: string;
   commitSha?: string;
+  committed?: boolean;
 }
 
 export function formatCommandStatusComment(options: CommandStatusCommentOptions): string {
@@ -216,11 +217,19 @@ export function formatCommandStatusComment(options: CommandStatusCommentOptions)
   }
 
   if (options.status === 'succeeded' && options.kind === 'scenarios') {
+    const committed = options.committed !== false;
+    const heading = committed
+      ? '## Tessl scenarios generated'
+      : '## Tessl scenarios already up to date';
+    const detail = committed
+      ? `Generated editable scenarios in \`${path}/evals/\` and committed them to this PR (${options.commitSha ?? 'commit created'}).`
+      : `Generated scenarios matched the existing files in \`${path}/evals/\`, so no new commit was needed.`;
+
     return [
       COMMAND_COMMENT_MARKER,
-      '## Tessl scenarios generated',
+      heading,
       '',
-      `Generated editable scenarios in \`${path}/evals/\` and committed them to this PR (${options.commitSha ?? 'commit created'}).`,
+      detail,
       '',
       'Next steps:',
       '',
@@ -331,7 +340,7 @@ export async function postOrUpdateCommandStatusComment(
 export async function postGeneratedScenariosComment(
   pluginDir: string,
   generationId: string,
-  commitSha: string,
+  commit: { commitSha: string; committed: boolean },
   prNumber = getPullRequestNumber(),
 ): Promise<void> {
   await postOrUpdateCommandStatusComment({
@@ -339,6 +348,7 @@ export async function postGeneratedScenariosComment(
     pluginDir,
     status: 'succeeded',
     generationId,
-    commitSha,
-  });
+    commitSha: commit.commitSha,
+    committed: commit.committed,
+  }, prNumber);
 }

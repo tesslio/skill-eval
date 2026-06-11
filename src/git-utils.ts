@@ -1,6 +1,11 @@
 import * as github from '@actions/github';
 import type { PullRequestHead } from './github-context.ts';
 
+export interface CommitGeneratedScenariosResult {
+  commitSha: string;
+  committed: boolean;
+}
+
 async function git(...args: string[]): Promise<string> {
   const proc = Bun.spawn(['git', ...args], { stdout: 'pipe', stderr: 'pipe' });
   const [stdout, stderr] = await Promise.all([
@@ -17,7 +22,7 @@ async function git(...args: string[]): Promise<string> {
 export async function commitGeneratedScenarios(
   evalsDirs: string[],
   prHead: PullRequestHead,
-): Promise<string> {
+): Promise<CommitGeneratedScenariosResult> {
   const baseRepo = `${github.context.repo.owner}/${github.context.repo.repo}`;
   if (prHead.repoFullName !== baseRepo) {
     throw new Error(
@@ -35,11 +40,17 @@ export async function commitGeneratedScenarios(
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('nothing to commit')) {
-      return await git('rev-parse', '--short', 'HEAD');
+      return {
+        commitSha: await git('rev-parse', '--short', 'HEAD'),
+        committed: false,
+      };
     }
     throw err;
   }
 
   await git('push', 'origin', `HEAD:${prHead.ref}`);
-  return await git('rev-parse', '--short', 'HEAD');
+  return {
+    commitSha: await git('rev-parse', '--short', 'HEAD'),
+    committed: true,
+  };
 }

@@ -298,8 +298,8 @@ async function generateCommitAndReportMockScenarios(
     if (!token) throw new Error('GITHUB_TOKEN is required to commit generated scenarios');
     const octokit = github.getOctokit(token);
     const prHead = await getPullRequestHead(octokit, prNumber);
-    const commitSha = await commitGeneratedScenarios([join(pluginDir, 'evals')], prHead);
-    await postGeneratedScenariosComment(pluginDir, genResult.generationId, commitSha, prNumber);
+    const commit = await commitGeneratedScenarios([join(pluginDir, 'evals')], prHead);
+    await postGeneratedScenariosComment(pluginDir, genResult.generationId, commit, prNumber);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await postCommandStatusSafely({
@@ -345,8 +345,8 @@ async function generateCommitAndReportScenarios(
     if (!token) throw new Error('GITHUB_TOKEN is required to commit generated scenarios');
     const octokit = github.getOctokit(token);
     const prHead = await getPullRequestHead(octokit, prNumber);
-    const commitSha = await commitGeneratedScenarios([join(pluginDir, 'evals')], prHead);
-    await postGeneratedScenariosComment(pluginDir, genResult.generationId, commitSha, prNumber);
+    const commit = await commitGeneratedScenarios([join(pluginDir, 'evals')], prHead);
+    await postGeneratedScenariosComment(pluginDir, genResult.generationId, commit, prNumber);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await postCommandStatusSafely({

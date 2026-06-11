@@ -542,6 +542,22 @@ describe('formatEvalComment', () => {
     expect(body).toContain('/tessl scenarios plugins/my-plugin');
     expect(body).toContain('plugins/my-plugin/evals/');
   });
+
+  test('formats no-op scenario generation when evals already match', async () => {
+    const { formatCommandStatusComment } = await import('./eval-comment.ts');
+    const body = formatCommandStatusComment({
+      kind: 'scenarios',
+      pluginDir: 'plugins/my-plugin',
+      status: 'succeeded',
+      generationId: 'gen-1',
+      commitSha: 'abc1234',
+      committed: false,
+    });
+
+    expect(body).toContain('Tessl scenarios already up to date');
+    expect(body).toContain('no new commit was needed');
+    expect(body).toContain('/tessl eval plugins/my-plugin');
+  });
 });
 
 // ---------------------------------------------------------------------------
