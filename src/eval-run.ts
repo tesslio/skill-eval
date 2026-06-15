@@ -1,5 +1,4 @@
 import * as core from '@actions/core';
-import { basename } from 'node:path';
 import { extractJson } from './skill-review.ts';
 import type {
   EvalResult,
@@ -10,13 +9,10 @@ import type {
   RawSolution,
 } from './eval-types.ts';
 import { isPluginRoot } from './find-plugins.ts';
+import { ensureProjectLinked } from './project-link.ts';
 import { tesslBin } from './tessl-bin.ts';
 
 const POLL_INTERVAL_MS = 30_000;
-
-function cleanCliOutput(output: string): string {
-  return output.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '').trim();
-}
 
 /** Compute a solution's total score as percentage of max possible. */
 function solutionScore(solution: RawSolution): number {
@@ -154,40 +150,6 @@ async function runTesslCommand(args: string[], cwd?: string): Promise<{ exitCode
     stdout,
     stderr,
   };
-}
-
-async function ensureProjectLinked(tilePath: string, workspace: string): Promise<string | null> {
-  if (!workspace || !isPluginRoot(tilePath)) {
-    return null;
-  }
-
-  const linkArgs = [tesslBin(), 'project', 'link', '--workspace', workspace];
-  const link = await runTesslCommand(linkArgs, tilePath);
-  if (link.exitCode === 0) {
-    core.info(`Tessl project link confirmed for ${tilePath}`);
-    return null;
-  }
-
-  const linkOutput = cleanCliOutput(`${link.stderr}\n${link.stdout}`);
-  if (!/No (?:matching )?Tessl project|No matching project/i.test(linkOutput)) {
-    return `tessl project link failed (exit ${link.exitCode}): ${linkOutput || 'unknown error'}`;
-  }
-
-  const projectName = basename(tilePath.replace(/\/+$/, '')) || 'skill-eval';
-  core.info(`No Tessl project found for ${tilePath}; creating "${projectName}" in workspace "${workspace}".`);
-
-  const createArgs = [tesslBin(), 'project', 'create', projectName, '--workspace', workspace];
-  const create = await runTesslCommand(createArgs, tilePath);
-  if (create.exitCode === 0) {
-    core.info(`Created Tessl project "${projectName}" for ${tilePath}`);
-    return null;
-  }
-
-  const createOutput = cleanCliOutput(`${create.stderr}\n${create.stdout}`);
-  const permissionHint = /Workspace not found|do not have permission/i.test(createOutput)
-    ? ' Ensure TESSL_TOKEN can create projects in this workspace, or create/link the Tessl project before running evals.'
-    : '';
-  return `tessl project create failed (exit ${create.exitCode}): ${createOutput || 'unknown error'}${permissionHint}`;
 }
 
 export async function runEval(

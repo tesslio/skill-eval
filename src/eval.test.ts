@@ -367,47 +367,35 @@ describe('runEval', () => {
     }
   });
 
-  test('creates project when plugin target has no existing project', async () => {
-    const pluginDir = join(tmpdir(), `eval-run-plugin-create-${Date.now()}`);
+  test('returns setup guidance instead of creating a project when plugin target has no existing project', async () => {
+    const pluginDir = join(tmpdir(), `eval-run-plugin-setup-${Date.now()}`);
     mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
     writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
 
     try {
       const spawnMock = makeMockSpawnSequence([
         { stdout: '', stderr: 'No Tessl project found. Run this command from a directory inside a project with tessl.json.', exitCode: 1 },
-        { stdout: 'Created project', stderr: '', exitCode: 0 },
-        { stdout: '', stderr: 'auth failed', exitCode: 1 },
       ]);
       // @ts-expect-error mock assignment
       Bun.spawn = spawnMock;
 
       const { runEval } = await import('./eval-run.ts');
-      await runEval(pluginDir, 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
+      const result = await runEval(pluginDir, 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
 
-      const createCall = spawnMock.mock.calls[1] as unknown[];
-      expect(createCall[0]).toEqual([
+      expect(result.error).toContain('not linked to a Tessl project yet');
+      expect(result.error).toContain('tessl project create --workspace my-ws');
+      expect(result.error).toContain('git add tessl.json');
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+
+      const linkCall = spawnMock.mock.calls[0] as unknown[];
+      expect(linkCall[0]).toEqual([
         'tessl',
         'project',
-        'create',
-        pluginDir.split('/').pop(),
+        'link',
         '--workspace',
         'my-ws',
       ]);
-      expect(createCall[1]).toEqual(expect.objectContaining({ cwd: pluginDir }));
-
-      const evalCall = spawnMock.mock.calls[2] as unknown[];
-      expect(evalCall[0]).toEqual([
-        'tessl',
-        'eval',
-        'run',
-        '.',
-        '--agent',
-        'claude:claude-sonnet-4-6',
-        '--runs',
-        '1',
-        '--json',
-      ]);
-      expect(evalCall[1]).toEqual(expect.objectContaining({ cwd: pluginDir }));
+      expect(linkCall[1]).toEqual(expect.objectContaining({ cwd: pluginDir }));
     } finally {
       rmSync(pluginDir, { recursive: true, force: true });
     }
@@ -682,6 +670,9 @@ describe('formatEvalComment', () => {
     expect(body).toContain('evals/');
     expect(body).toContain('TESSL_TOKEN');
     expect(body).toContain('eval-workspace');
+    expect(body).toContain('setup-tessl');
+    expect(body).toContain('tessl.json');
+    expect(body).toContain('tessl project create');
   });
 
   test('formats re-run guidance with both options and scenario file structure', async () => {
@@ -738,6 +729,27 @@ describe('formatEvalComment', () => {
     expect(body).toContain('Tessl scenarios already up to date');
     expect(body).toContain('no new commit was needed');
     expect(body).toContain('/tessl eval plugins/my-plugin');
+  });
+
+  test('formats setup guidance as markdown for failed commands', async () => {
+    const { formatCommandStatusComment } = await import('./eval-comment.ts');
+    const body = formatCommandStatusComment({
+      kind: 'scenarios',
+      pluginDir: 'plugins/my-plugin',
+      status: 'failed',
+      detail: [
+        'This plugin is not linked to a Tessl project yet.',
+        '```bash',
+        'tessl project create --workspace my-ws my-plugin',
+        '```',
+      ].join('\n'),
+      detailMarkdown: true,
+    });
+
+    expect(body).toContain('This plugin is not linked');
+    expect(body).toContain('```bash');
+    expect(body).toContain('tessl project create --workspace my-ws my-plugin');
+    expect(body).not.toContain('\\`\\`\\`bash');
   });
 });
 

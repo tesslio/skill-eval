@@ -170,7 +170,9 @@ export function formatEvalGuideComment(pluginDirs: string[]): string {
     '',
     'Setup note:',
     '',
+    '- This action installs/authenticates the Tessl CLI with `tesslio/setup-tessl`.',
     '- `TESSL_TOKEN` must be a Tessl API key with access to the configured `eval-workspace`.',
+    '- Before running scenarios/evals, make sure this plugin has a committed `tessl.json`. If it does not, run `tessl project create --workspace <workspace> <project-name>` from the plugin directory and commit the generated file.',
     '- Scenario generation uploads the checked-out plugin before committing `evals/` files back to this PR.',
     '',
     'Detected plugin paths:',
@@ -226,6 +228,7 @@ export interface CommandStatusCommentOptions {
   pluginDir: string;
   status: CommandStatus;
   detail?: string;
+  detailMarkdown?: boolean;
   generationId?: string;
   commitSha?: string;
   committed?: boolean;
@@ -306,7 +309,9 @@ export function formatCommandStatusComment(options: CommandStatusCommentOptions)
     '',
     `Command: \`${command}\``,
     '',
-    options.detail ? `Reason: ${escapeMarkdown(options.detail)}` : 'Reason: unknown failure',
+    options.detail
+      ? `Reason:\n\n${options.detailMarkdown ? options.detail : escapeMarkdown(options.detail)}`
+      : 'Reason: unknown failure',
     runLine,
   ].join('\n');
 }

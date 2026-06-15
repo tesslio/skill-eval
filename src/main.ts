@@ -20,6 +20,7 @@ import {
   getPullRequestNumber,
 } from './github-context.ts';
 import type { EvalResult } from './eval-types.ts';
+import { ensureProjectLinked } from './project-link.ts';
 import { generateAndDownloadScenarios } from './scenario-generate.ts';
 
 async function main(): Promise<void> {
@@ -97,6 +98,21 @@ async function main(): Promise<void> {
     }
 
     if (command.kind === 'scenarios') {
+      if (!testMode) {
+        const projectError = await ensureProjectLinked(pluginDir, evalWorkspace);
+        if (projectError) {
+          await postCommandStatusSafely({
+            kind: 'scenarios',
+            pluginDir,
+            status: 'failed',
+            detail: projectError,
+            detailMarkdown: true,
+          }, prNumber);
+          core.setFailed(projectError);
+          return;
+        }
+      }
+
       await postCommandStatusSafely({
         kind: 'scenarios',
         pluginDir,
@@ -142,6 +158,7 @@ async function main(): Promise<void> {
       pluginDir,
       status: evalErrors.length > 0 ? 'failed' : 'succeeded',
       detail: evalErrors.join('\n'),
+      detailMarkdown: evalErrors.some((error) => error.includes('This plugin is not linked to a Tessl project yet.')),
     }, prNumber);
     failForRegressions(evalResults, failOnRegression);
     return;
@@ -200,6 +217,14 @@ async function main(): Promise<void> {
       const genFailures: string[] = [];
 
       for (const pluginDir of pluginsNeedingGeneration) {
+        if (!testMode) {
+          const projectError = await ensureProjectLinked(pluginDir, evalWorkspace);
+          if (projectError) {
+            genFailures.push(`  ${pluginDir}: ${projectError}`);
+            continue;
+          }
+        }
+
         console.log(`  Generating ${scenarioCount} scenario(s) for ${pluginDir}...`);
         const genResult = testMode
           ? generateMockScenarios(pluginDir, scenarioCount)

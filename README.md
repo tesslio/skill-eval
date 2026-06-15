@@ -10,7 +10,18 @@ Use it to:
 
 Requires a `TESSL_TOKEN` to authenticate with the Tessl API. The token must have access to the configured `eval-workspace`; scenario generation uploads the checked-out plugin before committing generated `evals/` files back to the PR. The GitHub-provided `GITHUB_TOKEN` is used for PR comments and, when allowed, committing generated scenarios back to the PR branch.
 
-For plugin or legacy tile evals, `eval-workspace` also lets the action link the checked-out plugin to an existing Tessl project, or create one the first time it runs.
+For plugin or legacy tile evals, `eval-workspace` lets the action link the checked-out plugin to an existing Tessl project. Create or link that project once locally, then commit the generated `tessl.json`.
+
+One-time setup for each plugin:
+
+```bash
+cd path/to/plugin
+tessl project create --workspace my-workspace my-project-name
+git add tessl.json
+git commit -m "chore: link Tessl project"
+```
+
+The action installs and authenticates the Tessl CLI with `tesslio/setup-tessl`, but project creation should happen locally before CI runs scenarios or evals.
 
 ## Usage
 
@@ -95,7 +106,7 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 1. Detects changed `SKILL.md` or `evals/**` files in the PR
 2. Installs the [Tessl CLI](https://tessl.io) and authenticates with your token
 3. Finds parent plugin/tile directories containing `.tessl-plugin/plugin.json` or `tile.json`
-4. Links or creates the Tessl project for each plugin/tile when `eval-workspace` is set
+4. Links each plugin/tile to an existing Tessl project when `eval-workspace` is set
 5. Runs `tessl eval run` for each tile and polls for results
 6. Posts (or updates) an eval comment on the PR with per-scenario scores
 
