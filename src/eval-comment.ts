@@ -5,7 +5,6 @@ import { getPullRequestNumber } from './github-context.ts';
 const EVAL_COMMENT_MARKER = '<!-- tessl-skill-eval -->';
 const GUIDE_COMMENT_MARKER = '<!-- tessl-skill-eval-guide -->';
 const COMMAND_COMMENT_MARKER = '<!-- tessl-skill-eval-command -->';
-const RERUN_GUIDE_COMMENT_MARKER = '<!-- tessl-skill-eval-rerun -->';
 
 function escapeMarkdown(text: string): string {
   return text.replace(/[\\`*_{}[\]()#+\-.!|>~]/g, '\\$&');
@@ -178,47 +177,6 @@ export function formatEvalGuideComment(pluginDirs: string[]): string {
   ].join('\n');
 }
 
-export function formatEvalRerunGuideComment(pluginDirs: string[]): string {
-  const paths = pluginDirs.map(displayPath);
-  const primaryPath = paths[0] ?? 'path/to/plugin';
-  const evalCommands = paths.length > 0
-    ? paths.map((path) => `- \`/tessl eval ${path}\``).join('\n')
-    : `- \`/tessl eval ${primaryPath}\``;
-  const detectedPaths = paths.length > 0
-    ? paths.map((path) => `- \`${path}\``).join('\n')
-    : `- \`${primaryPath}\``;
-
-  return [
-    RERUN_GUIDE_COMMENT_MARKER,
-    '## Tessl Skill Eval — change detected',
-    '',
-    'Hey — you have changed `SKILL.md` or files under `evals/` again, and committed eval scenarios already exist on this PR. I have not re-run evals automatically. Pick one of the two options below:',
-    '',
-    '### Option 1 — Re-run evals with the existing scenarios',
-    '',
-    'Comment the matching command on this PR:',
-    '',
-    evalCommands,
-    '',
-    '### Option 2 — Amend the scenarios first, then re-run',
-    '',
-    'Edit the scenario files directly on this PR branch and commit them, then run Option 1. Each scenario lives in its own directory under `<plugin>/evals/`:',
-    '',
-    '```',
-    '<plugin>/evals/<scenario-name>/',
-    '├── scenario.json   # scenario metadata (description, references to inputs)',
-    '├── criteria.json   # weighted checklist used to grade the agent\'s output',
-    '├── task.md         # the task description handed to the agent',
-    '└── inputs/         # files the agent receives as input (optional)',
-    '```',
-    '',
-    'Tip: tighten `criteria.json` if the grader is too lenient, edit `task.md` to test a different agent task, or drop entire scenario directories you no longer want to grade against.',
-    '',
-    'Plugins with committed evals:',
-    detectedPaths,
-  ].join('\n');
-}
-
 export type CommandStatus = 'running' | 'succeeded' | 'failed';
 
 export interface CommandStatusCommentOptions {
@@ -371,17 +329,6 @@ export async function postOrUpdateEvalGuideComment(
   await postOrUpdateMarkedComment(
     GUIDE_COMMENT_MARKER,
     formatEvalGuideComment(pluginDirs),
-    prNumber,
-  );
-}
-
-export async function postOrUpdateEvalRerunGuideComment(
-  pluginDirs: string[],
-  prNumber = getPullRequestNumber(),
-): Promise<void> {
-  await postOrUpdateMarkedComment(
-    RERUN_GUIDE_COMMENT_MARKER,
-    formatEvalRerunGuideComment(pluginDirs),
     prNumber,
   );
 }

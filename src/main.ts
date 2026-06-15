@@ -9,7 +9,6 @@ import {
   postOrUpdateCommandStatusComment,
   postOrUpdateEvalComment,
   postOrUpdateEvalGuideComment,
-  postOrUpdateEvalRerunGuideComment,
 } from './eval-comment.ts';
 import { runEval } from './eval-run.ts';
 import { findPluginDirs, findPluginDirsWithEvals, resolveRequestedPluginDir } from './find-plugins.ts';
@@ -245,51 +244,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Re-run gate: when SKILL.md or evals/** are edited on a PR that already has
-  // committed scenarios, we ask the human to choose between re-running with the
-  // existing scenarios (/tessl eval ...) or amending the scenarios on the PR
-  // first. The action's own scenario-commit pushes are exempt so the immediate
-  // chain after /tessl scenarios keeps working.
-  const pluginsAlreadyHadEvals = pluginsWithEvals.filter(
-    (d) => !pluginsNeedingGeneration.includes(d),
-  );
-  if (pluginsAlreadyHadEvals.length > 0 && !isBotActor()) {
-    console.log(
-      `Plugins already have committed evals; skipping auto-eval and asking the reviewer ` +
-      `to choose between re-running and amending scenarios: ${pluginsAlreadyHadEvals.join(', ')}`,
-    );
-    if (shouldComment && prNumber !== null) {
-      try {
-        await postOrUpdateEvalRerunGuideComment(pluginsAlreadyHadEvals, prNumber);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        core.warning(`Could not post eval re-run guide PR comment: ${msg}`);
-      }
-    }
-    return;
-  }
-
   const evalResults = testMode
     ? await runMockEvalAndReport(pluginDirs, shouldComment, failOnRegression, prNumber)
     : await runEvalAndReport(pluginDirs, evalWorkspace, evalAgent, evalTimeout, evalRuns, shouldComment, failOnRegression, prNumber);
   failForRegressions(evalResults, failOnRegression);
 
   console.log('Eval completed.');
-}
-
-/**
- * Returns true when the actor that triggered this workflow run is the
- * github-actions bot (e.g. a scenario commit pushed by this action). Used
- * to keep the /tessl scenarios → eval chain auto-running, while still
- * asking a human reviewer to confirm a re-run on subsequent edits.
- */
-export function isBotActor(): boolean {
-  const actor = github.context.actor ?? '';
-  if (actor === 'github-actions[bot]' || actor === 'github-actions') return true;
-  const sender = (github.context.payload?.sender as { login?: string; type?: string } | undefined);
-  if (sender?.type === 'Bot') return true;
-  if (sender?.login === 'github-actions[bot]' || sender?.login === 'github-actions') return true;
-  return false;
 }
 
 function hasEvalsDir(pluginDir: string): boolean {

@@ -53,7 +53,7 @@ mock.module('@actions/github', () => ({
 const { getChangedSkillFiles, getChangedEvalTargetFiles } = await import('./changed-files.ts');
 const { runSkillReview, extractJson } = await import('./skill-review.ts');
 const { postOrUpdateComment } = await import('./comment.ts');
-const { parsePositiveInt, isBotActor } = await import('./main.ts');
+const { parsePositiveInt } = await import('./main.ts');
 const { parseTesslCommentCommand, isTrustedAuthorAssociation } = await import('./comment-command.ts');
 const { shouldRunPreflight, acknowledgeCommentCommand } = await import('./preflight.ts');
 const githubModule = await import('@actions/github');
@@ -93,56 +93,6 @@ describe('parsePositiveInt', () => {
 
   test('throws for NaN', () => {
     expect(() => parsePositiveInt('NaN', 'eval-timeout', 45)).toThrow('Invalid eval-timeout');
-  });
-});
-
-describe('isBotActor', () => {
-  const githubContext = githubModule.context as unknown as {
-    actor?: string;
-    payload: Record<string, unknown>;
-  };
-  const originalActor = githubContext.actor;
-  const originalPayload = githubContext.payload;
-
-  afterEach(() => {
-    githubContext.actor = originalActor;
-    githubContext.payload = originalPayload;
-  });
-
-  test('returns true when actor is github-actions[bot]', () => {
-    githubContext.actor = 'github-actions[bot]';
-    githubContext.payload = { pull_request: { number: 42 } };
-    expect(isBotActor()).toBe(true);
-  });
-
-  test('returns true when actor is github-actions', () => {
-    githubContext.actor = 'github-actions';
-    githubContext.payload = { pull_request: { number: 42 } };
-    expect(isBotActor()).toBe(true);
-  });
-
-  test('returns true when payload sender is a Bot', () => {
-    githubContext.actor = 'some-app[bot]';
-    githubContext.payload = {
-      pull_request: { number: 42 },
-      sender: { login: 'some-app[bot]', type: 'Bot' },
-    };
-    expect(isBotActor()).toBe(true);
-  });
-
-  test('returns false for human actors', () => {
-    githubContext.actor = 'rohan-tessl';
-    githubContext.payload = {
-      pull_request: { number: 42 },
-      sender: { login: 'rohan-tessl', type: 'User' },
-    };
-    expect(isBotActor()).toBe(false);
-  });
-
-  test('returns false when actor and sender are missing', () => {
-    githubContext.actor = '';
-    githubContext.payload = { pull_request: { number: 42 } };
-    expect(isBotActor()).toBe(false);
   });
 });
 
