@@ -81,6 +81,14 @@ async function main(): Promise<void> {
 
     const pluginDir = resolveRequestedPluginDir(command.requestedPath, rootPath);
     if (!pluginDir) {
+      await postCommandStatusSafely({
+        kind: command.kind,
+        pluginDir: command.requestedPath,
+        status: 'failed',
+        detail:
+          `Could not resolve "${command.requestedPath}" to a Tessl plugin or tile. ` +
+          'Pass a plugin directory, skill directory, SKILL.md file, or evals/ path.',
+      }, prNumber);
       core.setFailed(
         `Could not resolve "${command.requestedPath}" to a Tessl plugin or tile. ` +
         'Pass a plugin directory, skill directory, SKILL.md file, or evals/ path.',
