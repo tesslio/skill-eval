@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
-import { basename } from 'node:path';
+import { existsSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { isPluginRoot } from './find-plugins.ts';
 import { tesslBin } from './tessl-bin.ts';
 
@@ -41,6 +42,11 @@ export function projectSetupRequiredMessage(pluginDir: string, workspace: string
 
 export async function ensureProjectLinked(pluginDir: string, workspace: string): Promise<string | null> {
   if (!workspace || !isPluginRoot(pluginDir)) {
+    return null;
+  }
+
+  if (existsSync(join(pluginDir, 'tessl.json'))) {
+    core.info(`Committed tessl.json found for ${pluginDir}; using existing Tessl project link.`);
     return null;
   }
 

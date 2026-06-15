@@ -367,6 +367,39 @@ describe('runEval', () => {
     }
   });
 
+  test('uses committed tessl.json instead of linking plugin project', async () => {
+    const pluginDir = join(tmpdir(), `eval-run-plugin-linked-${Date.now()}`);
+    mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
+    writeFileSync(join(pluginDir, 'tessl.json'), '{"name":"my-ws/my-plugin"}');
+
+    try {
+      const spawnMock = makeMockSpawn('', 'auth failed', 1);
+      // @ts-expect-error mock assignment
+      Bun.spawn = spawnMock;
+
+      const { runEval } = await import('./eval-run.ts');
+      await runEval(pluginDir, 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
+
+      expect(spawnMock).toHaveBeenCalledTimes(1);
+      const evalCall = spawnMock.mock.calls[0] as unknown[];
+      expect(evalCall[0]).toEqual([
+        'tessl',
+        'eval',
+        'run',
+        '.',
+        '--agent',
+        'claude:claude-sonnet-4-6',
+        '--runs',
+        '1',
+        '--json',
+      ]);
+      expect(evalCall[1]).toEqual(expect.objectContaining({ cwd: pluginDir }));
+    } finally {
+      rmSync(pluginDir, { recursive: true, force: true });
+    }
+  });
+
   test('returns setup guidance instead of creating a project when plugin target has no existing project', async () => {
     const pluginDir = join(tmpdir(), `eval-run-plugin-setup-${Date.now()}`);
     mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
