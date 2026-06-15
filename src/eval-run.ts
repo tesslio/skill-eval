@@ -8,6 +8,7 @@ import type {
   RawScenario,
   RawSolution,
 } from './eval-types.ts';
+import { isPluginRoot } from './find-plugins.ts';
 import { tesslBin } from './tessl-bin.ts';
 
 const POLL_INTERVAL_MS = 30_000;
@@ -162,7 +163,9 @@ export async function runEval(
     String(runs),
     '--json',
   ];
-  if (workspace) {
+  // The Tessl CLI rejects --workspace when the target is a plugin or legacy
+  // tile root, because the workspace is already declared in plugin.json/tile.json.
+  if (workspace && !isPluginRoot(tilePath)) {
     args.splice(4, 0, '--workspace', workspace);
   }
 

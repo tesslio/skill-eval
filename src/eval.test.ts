@@ -321,6 +321,58 @@ describe('runEval', () => {
     expect(tesslBin()).toBe('tessl');
   });
 
+  test('omits --workspace when target is a plugin directory', async () => {
+    const pluginDir = join(tmpdir(), `eval-run-plugin-${Date.now()}`);
+    mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
+
+    try {
+      const spawnMock = makeMockSpawn('', 'auth failed', 1);
+      // @ts-expect-error mock assignment
+      Bun.spawn = spawnMock;
+
+      const { runEval } = await import('./eval-run.ts');
+      await runEval(pluginDir, 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
+
+      const firstCall = spawnMock.mock.calls[0] as unknown[];
+      expect(firstCall[0]).not.toContain('--workspace');
+      expect(firstCall[0]).not.toContain('my-ws');
+      expect(firstCall[0]).toEqual([
+        'tessl',
+        'eval',
+        'run',
+        pluginDir,
+        '--agent',
+        'claude:claude-sonnet-4-6',
+        '--runs',
+        '1',
+        '--json',
+      ]);
+    } finally {
+      rmSync(pluginDir, { recursive: true, force: true });
+    }
+  });
+
+  test('omits --workspace when target is a legacy tile directory', async () => {
+    const tileDir = join(tmpdir(), `eval-run-tile-${Date.now()}`);
+    mkdirSync(tileDir, { recursive: true });
+    writeFileSync(join(tileDir, 'tile.json'), '{}');
+
+    try {
+      const spawnMock = makeMockSpawn('', 'auth failed', 1);
+      // @ts-expect-error mock assignment
+      Bun.spawn = spawnMock;
+
+      const { runEval } = await import('./eval-run.ts');
+      await runEval(tileDir, 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
+
+      const firstCall = spawnMock.mock.calls[0] as unknown[];
+      expect(firstCall[0]).not.toContain('--workspace');
+    } finally {
+      rmSync(tileDir, { recursive: true, force: true });
+    }
+  });
+
   test('returns error when tessl eval run fails', async () => {
     // @ts-expect-error mock assignment
     Bun.spawn = makeMockSpawn('', 'auth failed', 1);
