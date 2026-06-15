@@ -321,13 +321,16 @@ describe('runEval', () => {
     expect(tesslBin()).toBe('tessl');
   });
 
-  test('omits --workspace when target is a plugin directory', async () => {
+  test('links project and omits --workspace when target is a plugin directory', async () => {
     const pluginDir = join(tmpdir(), `eval-run-plugin-${Date.now()}`);
     mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
     writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
 
     try {
-      const spawnMock = makeMockSpawn('', 'auth failed', 1);
+      const spawnMock = makeMockSpawnSequence([
+        { stdout: 'linked', stderr: '', exitCode: 0 },
+        { stdout: '', stderr: 'auth failed', exitCode: 1 },
+      ]);
       // @ts-expect-error mock assignment
       Bun.spawn = spawnMock;
 
@@ -335,39 +338,111 @@ describe('runEval', () => {
       await runEval(pluginDir, 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
 
       const firstCall = spawnMock.mock.calls[0] as unknown[];
-      expect(firstCall[0]).not.toContain('--workspace');
-      expect(firstCall[0]).not.toContain('my-ws');
       expect(firstCall[0]).toEqual([
+        'tessl',
+        'project',
+        'link',
+        '--workspace',
+        'my-ws',
+      ]);
+      expect(firstCall[1]).toEqual(expect.objectContaining({ cwd: pluginDir }));
+
+      const secondCall = spawnMock.mock.calls[1] as unknown[];
+      expect(secondCall[0]).not.toContain('--workspace');
+      expect(secondCall[0]).not.toContain('my-ws');
+      expect(secondCall[0]).toEqual([
         'tessl',
         'eval',
         'run',
-        pluginDir,
+        '.',
         '--agent',
         'claude:claude-sonnet-4-6',
         '--runs',
         '1',
         '--json',
       ]);
+      expect(secondCall[1]).toEqual(expect.objectContaining({ cwd: pluginDir }));
     } finally {
       rmSync(pluginDir, { recursive: true, force: true });
     }
   });
 
-  test('omits --workspace when target is a legacy tile directory', async () => {
+  test('creates project when plugin target has no existing project', async () => {
+    const pluginDir = join(tmpdir(), `eval-run-plugin-create-${Date.now()}`);
+    mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
+
+    try {
+      const spawnMock = makeMockSpawnSequence([
+        { stdout: '', stderr: 'No matching project for this repository was found in workspace my-ws.', exitCode: 1 },
+        { stdout: 'Created project', stderr: '', exitCode: 0 },
+        { stdout: '', stderr: 'auth failed', exitCode: 1 },
+      ]);
+      // @ts-expect-error mock assignment
+      Bun.spawn = spawnMock;
+
+      const { runEval } = await import('./eval-run.ts');
+      await runEval(pluginDir, 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
+
+      const createCall = spawnMock.mock.calls[1] as unknown[];
+      expect(createCall[0]).toEqual([
+        'tessl',
+        'project',
+        'create',
+        pluginDir.split('/').pop(),
+        '--workspace',
+        'my-ws',
+      ]);
+      expect(createCall[1]).toEqual(expect.objectContaining({ cwd: pluginDir }));
+
+      const evalCall = spawnMock.mock.calls[2] as unknown[];
+      expect(evalCall[0]).toEqual([
+        'tessl',
+        'eval',
+        'run',
+        '.',
+        '--agent',
+        'claude:claude-sonnet-4-6',
+        '--runs',
+        '1',
+        '--json',
+      ]);
+      expect(evalCall[1]).toEqual(expect.objectContaining({ cwd: pluginDir }));
+    } finally {
+      rmSync(pluginDir, { recursive: true, force: true });
+    }
+  });
+
+  test('links project and omits --workspace when target is a legacy tile directory', async () => {
     const tileDir = join(tmpdir(), `eval-run-tile-${Date.now()}`);
     mkdirSync(tileDir, { recursive: true });
     writeFileSync(join(tileDir, 'tile.json'), '{}');
 
     try {
-      const spawnMock = makeMockSpawn('', 'auth failed', 1);
+      const spawnMock = makeMockSpawnSequence([
+        { stdout: 'linked', stderr: '', exitCode: 0 },
+        { stdout: '', stderr: 'auth failed', exitCode: 1 },
+      ]);
       // @ts-expect-error mock assignment
       Bun.spawn = spawnMock;
 
       const { runEval } = await import('./eval-run.ts');
       await runEval(tileDir, 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
 
-      const firstCall = spawnMock.mock.calls[0] as unknown[];
-      expect(firstCall[0]).not.toContain('--workspace');
+      const evalCall = spawnMock.mock.calls[1] as unknown[];
+      expect(evalCall[0]).not.toContain('--workspace');
+      expect(evalCall[0]).toEqual([
+        'tessl',
+        'eval',
+        'run',
+        '.',
+        '--agent',
+        'claude:claude-sonnet-4-6',
+        '--runs',
+        '1',
+        '--json',
+      ]);
+      expect(evalCall[1]).toEqual(expect.objectContaining({ cwd: tileDir }));
     } finally {
       rmSync(tileDir, { recursive: true, force: true });
     }

@@ -1,4 +1,5 @@
 import * as core from '@actions/core';
+import { basename } from 'node:path';
 import { extractJson } from './skill-review.ts';
 import type {
   EvalResult,
@@ -12,6 +13,10 @@ import { isPluginRoot } from './find-plugins.ts';
 import { tesslBin } from './tessl-bin.ts';
 
 const POLL_INTERVAL_MS = 30_000;
+
+function cleanCliOutput(output: string): string {
+  return output.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '').trim();
+}
 
 /** Compute a solution's total score as percentage of max possible. */
 function solutionScore(solution: RawSolution): number {
@@ -136,6 +141,52 @@ function extractStatus(rawOutput: string): string | undefined {
   }
 }
 
+async function runTesslCommand(args: string[], cwd?: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const proc = Bun.spawn(args, { cwd, stdout: 'pipe', stderr: 'pipe' });
+
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  return {
+    exitCode: await proc.exited,
+    stdout,
+    stderr,
+  };
+}
+
+async function ensureProjectLinked(tilePath: string, workspace: string): Promise<string | null> {
+  if (!workspace || !isPluginRoot(tilePath)) {
+    return null;
+  }
+
+  const linkArgs = [tesslBin(), 'project', 'link', '--workspace', workspace];
+  const link = await runTesslCommand(linkArgs, tilePath);
+  if (link.exitCode === 0) {
+    core.info(`Tessl project link confirmed for ${tilePath}`);
+    return null;
+  }
+
+  const linkOutput = cleanCliOutput(`${link.stderr}\n${link.stdout}`);
+  if (!/No matching project/i.test(linkOutput)) {
+    return `tessl project link failed (exit ${link.exitCode}): ${linkOutput || 'unknown error'}`;
+  }
+
+  const projectName = basename(tilePath.replace(/\/+$/, '')) || 'skill-eval';
+  core.info(`No Tessl project found for ${tilePath}; creating "${projectName}" in workspace "${workspace}".`);
+
+  const createArgs = [tesslBin(), 'project', 'create', projectName, '--workspace', workspace];
+  const create = await runTesslCommand(createArgs, tilePath);
+  if (create.exitCode === 0) {
+    core.info(`Created Tessl project "${projectName}" for ${tilePath}`);
+    return null;
+  }
+
+  const createOutput = cleanCliOutput(`${create.stderr}\n${create.stdout}`);
+  return `tessl project create failed (exit ${create.exitCode}): ${createOutput || 'unknown error'}`;
+}
+
 export async function runEval(
   tilePath: string,
   workspace: string,
@@ -152,11 +203,19 @@ export async function runEval(
     error,
   });
 
+  const localPluginOrTile = isPluginRoot(tilePath);
+  const projectError = await ensureProjectLinked(tilePath, workspace);
+  if (projectError) {
+    return errorResult(projectError);
+  }
+
+  const evalSource = localPluginOrTile ? '.' : tilePath;
+  const evalCwd = localPluginOrTile ? tilePath : undefined;
   const args = [
     tesslBin(),
     'eval',
     'run',
-    tilePath,
+    evalSource,
     '--agent',
     agent,
     '--runs',
@@ -165,23 +224,16 @@ export async function runEval(
   ];
   // The Tessl CLI rejects --workspace when the target is a plugin or legacy
   // tile root, because the workspace is already declared in plugin.json/tile.json.
-  if (workspace && !isPluginRoot(tilePath)) {
+  if (workspace && !localPluginOrTile) {
     args.splice(4, 0, '--workspace', workspace);
   }
 
-  const startProc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' });
-
-  const [startStdout, startStderr] = await Promise.all([
-    new Response(startProc.stdout).text(),
-    new Response(startProc.stderr).text(),
-  ]);
-
-  const startExit = await startProc.exited;
-  if (startExit !== 0) {
-    return errorResult(`tessl eval run failed (exit ${startExit}): ${startStderr}`);
+  const start = await runTesslCommand(args, evalCwd);
+  if (start.exitCode !== 0) {
+    return errorResult(`tessl eval run failed (exit ${start.exitCode}): ${start.stderr}`);
   }
 
-  const startJson = extractJson(startStdout);
+  const startJson = extractJson(start.stdout);
   if (!startJson) {
     return errorResult('Could not parse tessl eval run output');
   }
