@@ -169,7 +169,7 @@ async function ensureProjectLinked(tilePath: string, workspace: string): Promise
   }
 
   const linkOutput = cleanCliOutput(`${link.stderr}\n${link.stdout}`);
-  if (!/No matching project/i.test(linkOutput)) {
+  if (!/No (?:matching )?Tessl project|No matching project/i.test(linkOutput)) {
     return `tessl project link failed (exit ${link.exitCode}): ${linkOutput || 'unknown error'}`;
   }
 

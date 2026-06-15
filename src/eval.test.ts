@@ -374,7 +374,7 @@ describe('runEval', () => {
 
     try {
       const spawnMock = makeMockSpawnSequence([
-        { stdout: '', stderr: 'No matching project for this repository was found in workspace my-ws.', exitCode: 1 },
+        { stdout: '', stderr: 'No Tessl project found. Run this command from a directory inside a project with tessl.json.', exitCode: 1 },
         { stdout: 'Created project', stderr: '', exitCode: 0 },
         { stdout: '', stderr: 'auth failed', exitCode: 1 },
       ]);
