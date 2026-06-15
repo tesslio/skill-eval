@@ -609,6 +609,32 @@ describe('formatEvalComment', () => {
     expect(body).toContain('eval-workspace');
   });
 
+  test('formats re-run guidance with both options and scenario file structure', async () => {
+    const { formatEvalRerunGuideComment } = await import('./eval-comment.ts');
+    const body = formatEvalRerunGuideComment(['plugins/my-plugin']);
+
+    expect(body).toContain('<!-- tessl-skill-eval-rerun -->');
+    expect(body).toContain('change detected');
+    expect(body).toContain('Option 1');
+    expect(body).toContain('Option 2');
+    expect(body).toContain('/tessl eval plugins/my-plugin');
+    expect(body).toContain('scenario.json');
+    expect(body).toContain('criteria.json');
+    expect(body).toContain('task.md');
+    expect(body).toContain('inputs/');
+    expect(body).toContain('plugins/my-plugin');
+  });
+
+  test('re-run guidance lists every plugin with committed evals', async () => {
+    const { formatEvalRerunGuideComment } = await import('./eval-comment.ts');
+    const body = formatEvalRerunGuideComment(['plugins/a', 'plugins/b']);
+
+    expect(body).toContain('/tessl eval plugins/a');
+    expect(body).toContain('/tessl eval plugins/b');
+    expect(body).toContain('- `plugins/a`');
+    expect(body).toContain('- `plugins/b`');
+  });
+
   test('formats scenario command acknowledgement', async () => {
     const { formatCommandStatusComment } = await import('./eval-comment.ts');
     const body = formatCommandStatusComment({
