@@ -184,7 +184,10 @@ async function ensureProjectLinked(tilePath: string, workspace: string): Promise
   }
 
   const createOutput = cleanCliOutput(`${create.stderr}\n${create.stdout}`);
-  return `tessl project create failed (exit ${create.exitCode}): ${createOutput || 'unknown error'}`;
+  const permissionHint = /Workspace not found|do not have permission/i.test(createOutput)
+    ? ' Ensure TESSL_TOKEN can create projects in this workspace, or create/link the Tessl project before running evals.'
+    : '';
+  return `tessl project create failed (exit ${create.exitCode}): ${createOutput || 'unknown error'}${permissionHint}`;
 }
 
 export async function runEval(
