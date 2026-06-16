@@ -168,12 +168,10 @@ export function formatEvalGuideComment(pluginDirs: string[]): string {
     '- Review, edit, or delete the generated `evals/` files directly in this PR.',
     `- Comment \`/tessl eval ${primaryPath}\` to run evals against the reviewed scenarios.`,
     '',
-    'Setup note:',
+    'If setup fails:',
     '',
-    '- This action installs/authenticates the Tessl CLI with `tesslio/setup-tessl`.',
-    '- `TESSL_TOKEN` must be a Tessl API key with access to the configured `eval-workspace`.',
-    '- Before running scenarios/evals, make sure this plugin has a committed `tessl.json`. If it does not, run `tessl project create --workspace <workspace> <project-name>` from the plugin directory and commit the generated file.',
-    '- Scenario generation uploads the checked-out plugin before committing `evals/` files back to this PR.',
+    '- Make sure `TESSL_TOKEN` can access the configured Tessl workspace.',
+    '- Make sure the plugin has a committed `tessl.json`. If not, run `tessl project create --workspace <workspace> <project-name>` from the plugin directory and commit it.',
     '',
     'Detected plugin paths:',
     detectedPaths || `- \`${primaryPath}\``,
@@ -243,17 +241,15 @@ export function formatCommandStatusComment(options: CommandStatusCommentOptions)
   if (options.status === 'running' && options.kind === 'scenarios') {
     return [
       COMMAND_COMMENT_MARKER,
-      '## Tessl command received',
+      '## Generating Tessl scenarios',
       '',
       `Running \`${command}\`.`,
       runLine,
-      'I am generating scenarios now. If generation succeeds, I will commit editable files under:',
+      'I will commit new editable scenarios under:',
       '',
       `\`${path}/evals/\``,
       '',
-      'This uses the configured Tessl workspace and the `TESSL_TOKEN` secret for upload/generation.',
-      '',
-      'Then you can review, edit, or delete them directly in this PR before running evals.',
+      'Then you can review, edit, or delete them before running evals.',
     ].join('\n');
   }
 
@@ -274,7 +270,7 @@ export function formatCommandStatusComment(options: CommandStatusCommentOptions)
       ? '## Tessl scenarios generated'
       : '## Tessl scenarios already up to date';
     const detail = committed
-      ? `Generated editable scenarios in \`${path}/evals/\` and committed them to this PR (${options.commitSha ?? 'commit created'}).`
+      ? `New scenarios were generated in \`${path}/evals/\` and committed to this PR (${options.commitSha ?? 'commit created'}).`
       : `Generated scenarios matched the existing files in \`${path}/evals/\`, so no new commit was needed.`;
 
     return [
