@@ -939,6 +939,29 @@ describe('generateAndDownloadScenarios', () => {
     expect(spawnMock).toHaveBeenCalledTimes(1);
   });
 
+  test('fails fast when skill frontmatter name is missing', async () => {
+    const spawnMock = makeMockSpawn(
+      '',
+      "✖ Failed to generate scenarios\n✘ Root-level skill 'SKILL.md' has no 'name' in frontmatter — add a 'name:' field to SKILL.md.",
+      1,
+    );
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+    const pluginDir = join(tmp, 'missing-name-plugin');
+    mkdirSync(join(pluginDir, '.tessl-plugin'), { recursive: true });
+    writeFileSync(join(pluginDir, '.tessl-plugin', 'plugin.json'), '{}');
+
+    const { generateAndDownloadScenarios } = await import('./scenario-generate.ts');
+    const result = await generateAndDownloadScenarios(pluginDir, 1, 1, {
+      workspace: 'bapfernandez',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('missing required frontmatter');
+    expect(result.error).toContain('name:');
+    expect(spawnMock).toHaveBeenCalledTimes(1);
+  });
+
   test('returns actionable error when generation has no downloadable scenarios', async () => {
     const spawnMock = makeMockSpawnSequence([
       { stdout: '{"generationId": "gen-empty"}', stderr: '', exitCode: 0 },

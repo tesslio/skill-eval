@@ -70,7 +70,17 @@ function scenarioGenerateArgs(
 }
 
 function fatalScenarioGenerateError(output: string, options: ScenarioGenerateOptions): string | null {
+  const cleaned = cleanCliOutput(output);
+
   if (!/403 Forbidden|Failed to get upload URL/i.test(output)) {
+    if (/Root-level skill .* has no 'name' in frontmatter|add a 'name:' field to SKILL\.md/i.test(cleaned)) {
+      return [
+        'Tessl could not generate scenarios because `SKILL.md` is missing required frontmatter.',
+        'Add a `name:` field to the skill frontmatter, commit it, then rerun the scenario command.',
+        cleaned,
+      ].join(' ');
+    }
+
     return null;
   }
 
