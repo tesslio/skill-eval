@@ -702,8 +702,8 @@ describe('formatEvalComment', () => {
     expect(body).toContain('/tessl eval plugins/my-plugin');
     expect(body).toContain('evals/');
     expect(body).toContain('TESSL_TOKEN');
-    expect(body).toContain('eval-workspace');
-    expect(body).toContain('setup-tessl');
+    expect(body).toContain('Tessl workspace');
+    expect(body).not.toContain('setup-tessl');
     expect(body).toContain('tessl.json');
     expect(body).toContain('tessl project create');
   });
@@ -742,10 +742,10 @@ describe('formatEvalComment', () => {
       status: 'running',
     });
 
-    expect(body).toContain('Tessl command received');
+    expect(body).toContain('Generating Tessl scenarios');
     expect(body).toContain('/tessl scenarios plugins/my-plugin');
     expect(body).toContain('plugins/my-plugin/evals/');
-    expect(body).toContain('TESSL_TOKEN');
+    expect(body).toContain('commit new editable scenarios');
   });
 
   test('formats no-op scenario generation when evals already match', async () => {

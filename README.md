@@ -8,7 +8,7 @@ Use it to:
 - Review or edit the generated `evals/` files directly in the PR.
 - Comment `/tessl eval path/to/skill` to run evals against the current PR head.
 
-Requires a `TESSL_TOKEN` to authenticate with the Tessl API. The token must have access to the configured `eval-workspace`; scenario generation uploads the checked-out plugin before committing generated `evals/` files back to the PR. The GitHub-provided `GITHUB_TOKEN` is used for PR comments and, when allowed, committing generated scenarios back to the PR branch.
+Requires a `TESSL_TOKEN` with access to the configured `eval-workspace`. Scenario generation uploads the checked-out plugin and commits generated `evals/` files back to the PR. The GitHub-provided `GITHUB_TOKEN` is used for PR comments and, when allowed, committing generated scenarios back to the PR branch.
 
 For plugin or legacy tile evals, `eval-workspace` lets the action link the checked-out plugin to an existing Tessl project. Create or link that project once locally, then commit the generated `tessl.json`.
 
@@ -21,7 +21,7 @@ git add tessl.json
 git commit -m "chore: link Tessl project"
 ```
 
-The action installs and authenticates the Tessl CLI with `tesslio/setup-tessl`, but project creation should happen locally before CI runs scenarios or evals.
+If the action says the plugin is not linked yet, run the one-time setup locally and commit `tessl.json`.
 
 ## Usage
 
