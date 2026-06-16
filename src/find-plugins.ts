@@ -1,10 +1,10 @@
 import * as core from '@actions/core';
-import { dirname, join } from 'node:path';
+import { dirname, join, normalize } from 'node:path';
 import { existsSync, statSync } from 'node:fs';
 
 const MAX_WALK_UP = 5;
 
-function isPluginRoot(dir: string): boolean {
+export function isPluginRoot(dir: string): boolean {
   return (
     existsSync(join(dir, '.tessl-plugin', 'plugin.json')) ||
     existsSync(join(dir, 'tile.json'))
@@ -70,4 +70,32 @@ export function findPluginDirs(filePaths: string[]): string[] {
   }
 
   return result;
+}
+
+export function resolveRequestedPluginDir(requestedPath: string, rootPath = '.'): string | null {
+  const trimmed = requestedPath.trim().replace(/^\.\/+/, '');
+  if (!trimmed || trimmed.includes('\0')) return null;
+
+  const candidate = normalize(join(rootPath, trimmed));
+
+  if (existsSync(candidate) && statSync(candidate).isDirectory()) {
+    if (isPluginRoot(candidate)) return candidate;
+
+    const skillFile = join(candidate, 'SKILL.md');
+    if (existsSync(skillFile) && statSync(skillFile).isFile()) {
+      return findPluginDir(skillFile);
+    }
+
+    return findPluginDir(join(candidate, 'placeholder'));
+  }
+
+  if (existsSync(candidate) && statSync(candidate).isFile()) {
+    return findPluginDir(candidate);
+  }
+
+  if (candidate.endsWith('SKILL.md')) {
+    return findPluginDir(candidate);
+  }
+
+  return null;
 }

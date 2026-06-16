@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 import { extractJson } from './skill-review.ts';
 import { tesslBin } from './tessl-bin.ts';
 
@@ -21,12 +22,101 @@ export interface ScenarioGenerateResult {
   error?: string;
 }
 
+export interface ScenarioGenerateOptions {
+  prNumber?: number;
+  commits?: string[];
+  workspace?: string;
+}
+
 /**
  * Extract the tile name from a tile path (last directory component).
  * e.g. "discovery" from "discovery" or "tiles/discovery" from "tiles/discovery"
  */
 function tileNameFromPath(tilePath: string): string {
   return tilePath.replace(/\/+$/, '').split('/').pop() ?? tilePath;
+}
+
+function isPluginRoot(tilePath: string): boolean {
+  return existsSync(join(tilePath, '.tessl-plugin', 'plugin.json'));
+}
+
+function isLegacyTileRoot(tilePath: string): boolean {
+  return existsSync(join(tilePath, 'tile.json'));
+}
+
+function scenarioGenerateArgs(
+  tilePath: string,
+  count: number,
+  options: ScenarioGenerateOptions,
+): string[] {
+  const args = [tesslBin(), 'scenario', 'generate', tilePath];
+
+  if (isLegacyTileRoot(tilePath) || isPluginRoot(tilePath)) {
+    args.push('-n', String(count));
+  } else {
+    if (options.workspace) {
+      args.push('--workspace', options.workspace);
+    }
+
+    if (options.prNumber) {
+      args.push(`--prs=${options.prNumber}`);
+    } else if (options.commits?.length) {
+      args.push(`--commits=${options.commits.join(',')}`);
+    }
+  }
+
+  args.push('--json');
+  return args;
+}
+
+function fatalScenarioGenerateError(output: string, options: ScenarioGenerateOptions): string | null {
+  const cleaned = cleanCliOutput(output);
+
+  if (!/403 Forbidden|Failed to get upload URL/i.test(output)) {
+    if (/Root-level skill .* has no 'name' in frontmatter|add a 'name:' field to SKILL\.md/i.test(cleaned)) {
+      return [
+        'Tessl could not generate scenarios because `SKILL.md` is missing required frontmatter.',
+        'Add a `name:` field to the skill frontmatter, commit it, then rerun the scenario command.',
+        cleaned,
+      ].join(' ');
+    }
+
+    return null;
+  }
+
+  const workspace = options.workspace?.trim();
+  const workspaceHint = workspace
+    ? `configured eval-workspace \`${workspace}\``
+    : 'configured `eval-workspace`';
+
+  return [
+    'Tessl could not upload the plugin for scenario generation: 403 Forbidden.',
+    `Check that \`TESSL_TOKEN\` is a Tessl API key with access to the ${workspaceHint}.`,
+  ].join(' ');
+}
+
+function cleanCliOutput(output: string): string {
+  return output.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, '').trim();
+}
+
+function scenarioDownloadError(
+  exitCode: number,
+  stderr: string,
+  generationId: string,
+  tilePath: string,
+): string {
+  const cleaned = cleanCliOutput(stderr);
+
+  if (/No scenarios found/i.test(cleaned)) {
+    return [
+      `Tessl completed scenario generation but returned no downloadable scenarios for \`${tilePath}\`.`,
+      'Make the skill more specific, with concrete behavior and expected outputs, then retry',
+      `\`/tessl scenarios ${tilePath}\`.`,
+      `Generation: ${generationId}`,
+    ].join(' ');
+  }
+
+  return `tessl scenario download failed (exit ${exitCode}): ${cleaned || 'unknown error'}`;
 }
 
 /**
@@ -76,14 +166,33 @@ async function findInProgressGeneration(tileName: string): Promise<string | null
 async function startOrAdoptGeneration(
   tilePath: string,
   count: number,
+  options: ScenarioGenerateOptions,
 ): Promise<{ generationId: string } | { error: string }> {
   const tileName = tileNameFromPath(tilePath);
   const deadline = Date.now() + GENERATE_RETRY_TIMEOUT_MS;
 
+  const localPluginOrTile = isPluginRoot(tilePath) || isLegacyTileRoot(tilePath);
+
+  if (!localPluginOrTile && !options.prNumber && !options.commits?.length) {
+    return {
+      error:
+        'Repository scenario generation requires PR or commit context. ' +
+        'Run from a pull request or provide commits for tessl scenario generate.',
+    };
+  }
+
+  if (!localPluginOrTile && !options.workspace) {
+    return {
+      error:
+        'Repository scenario generation requires eval-workspace. ' +
+        'Set eval-workspace in your GitHub Actions workflow.',
+    };
+  }
+
   while (Date.now() < deadline) {
     // Try to start a new generation
     const genProc = Bun.spawn(
-      [tesslBin(), 'scenario', 'generate', tilePath, '-n', String(count), '--json'],
+      scenarioGenerateArgs(tilePath, count, options),
       { stdout: 'pipe', stderr: 'pipe' },
     );
 
@@ -117,6 +226,11 @@ async function startOrAdoptGeneration(
     core.info(`tessl scenario generate failed (exit ${genExit}): ${stderrTrimmed}`);
     core.info(`stdout was: ${genStdout.trim().slice(0, 200) || '(empty)'}`);
 
+    const fatalError = fatalScenarioGenerateError(`${genStderr}\n${genStdout}`, options);
+    if (fatalError) {
+      return { error: fatalError };
+    }
+
     const existingId = await findInProgressGeneration(tileName);
     if (existingId) {
       core.info(`Found in-progress generation ${existingId} for tile "${tileName}" — adopting it`);
@@ -138,6 +252,7 @@ export async function generateAndDownloadScenarios(
   tilePath: string,
   count: number,
   timeoutMinutes: number,
+  options: ScenarioGenerateOptions = {},
 ): Promise<ScenarioGenerateResult> {
   const errorResult = (error: string): ScenarioGenerateResult => ({
     tilePath,
@@ -147,7 +262,7 @@ export async function generateAndDownloadScenarios(
   });
 
   // 1. Start generation (or adopt an existing in-progress one)
-  const startResult = await startOrAdoptGeneration(tilePath, count);
+  const startResult = await startOrAdoptGeneration(tilePath, count, options);
   if ('error' in startResult) {
     return errorResult(startResult.error);
   }
@@ -223,7 +338,7 @@ export async function generateAndDownloadScenarios(
 
   const dlExit = await dlProc.exited;
   if (dlExit !== 0) {
-    return errorResult(`tessl scenario download failed (exit ${dlExit}): ${dlStderr}`);
+    return errorResult(scenarioDownloadError(dlExit, dlStderr, generationId, tilePath));
   }
 
   core.info(`Scenarios downloaded to ${evalsDir}`);

@@ -8,6 +8,8 @@ import type {
   RawScenario,
   RawSolution,
 } from './eval-types.ts';
+import { isPluginRoot } from './find-plugins.ts';
+import { ensureProjectLinked } from './project-link.ts';
 import { tesslBin } from './tessl-bin.ts';
 
 const POLL_INTERVAL_MS = 30_000;
@@ -135,11 +137,27 @@ function extractStatus(rawOutput: string): string | undefined {
   }
 }
 
+async function runTesslCommand(args: string[], cwd?: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const proc = Bun.spawn(args, { cwd, stdout: 'pipe', stderr: 'pipe' });
+
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+
+  return {
+    exitCode: await proc.exited,
+    stdout,
+    stderr,
+  };
+}
+
 export async function runEval(
   tilePath: string,
   workspace: string,
   agent: string,
   timeoutMinutes: number,
+  runs: number,
 ): Promise<EvalResult> {
   const errorResult = (error: string): EvalResult => ({
     tilePath,
@@ -150,24 +168,37 @@ export async function runEval(
     error,
   });
 
-  const args = [tesslBin(), 'eval', 'run', tilePath, '--agent', agent, '--json'];
-  if (workspace) {
+  const localPluginOrTile = isPluginRoot(tilePath);
+  const projectError = await ensureProjectLinked(tilePath, workspace);
+  if (projectError) {
+    return errorResult(projectError);
+  }
+
+  const evalSource = localPluginOrTile ? '.' : tilePath;
+  const evalCwd = localPluginOrTile ? tilePath : undefined;
+  const args = [
+    tesslBin(),
+    'eval',
+    'run',
+    evalSource,
+    '--agent',
+    agent,
+    '--runs',
+    String(runs),
+    '--json',
+  ];
+  // The Tessl CLI rejects --workspace when the target is a plugin or legacy
+  // tile root, because the workspace is already declared in plugin.json/tile.json.
+  if (workspace && !localPluginOrTile) {
     args.splice(4, 0, '--workspace', workspace);
   }
 
-  const startProc = Bun.spawn(args, { stdout: 'pipe', stderr: 'pipe' });
-
-  const [startStdout, startStderr] = await Promise.all([
-    new Response(startProc.stdout).text(),
-    new Response(startProc.stderr).text(),
-  ]);
-
-  const startExit = await startProc.exited;
-  if (startExit !== 0) {
-    return errorResult(`tessl eval run failed (exit ${startExit}): ${startStderr}`);
+  const start = await runTesslCommand(args, evalCwd);
+  if (start.exitCode !== 0) {
+    return errorResult(`tessl eval run failed (exit ${start.exitCode}): ${start.stderr}`);
   }
 
-  const startJson = extractJson(startStdout);
+  const startJson = extractJson(start.stdout);
   if (!startJson) {
     return errorResult('Could not parse tessl eval run output');
   }

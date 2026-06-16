@@ -4,6 +4,24 @@ import { join } from 'node:path';
 export async function getChangedSkillFiles(
   rootPath: string,
 ): Promise<string[]> {
+  const files = await getChangedPullRequestFiles(rootPath);
+  return files.filter((file) => file.endsWith('/SKILL.md') || file === 'SKILL.md');
+}
+
+export async function getChangedEvalTargetFiles(
+  rootPath: string,
+): Promise<string[]> {
+  const files = await getChangedPullRequestFiles(rootPath);
+  return files.filter(
+    (file) =>
+      file.endsWith('/SKILL.md') ||
+      file === 'SKILL.md' ||
+      file.includes('/evals/') ||
+      file.startsWith('evals/'),
+  );
+}
+
+async function getChangedPullRequestFiles(rootPath: string): Promise<string[]> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
     throw new Error('GITHUB_TOKEN is required to detect changed files');
@@ -33,9 +51,7 @@ export async function getChangedSkillFiles(
 
     for (const file of response.data) {
       if (file.status === 'removed') continue;
-      if (file.filename.endsWith('/SKILL.md') || file.filename === 'SKILL.md') {
-        changedFiles.push(join(rootPath, file.filename));
-      }
+      changedFiles.push(join(rootPath, file.filename));
     }
 
     if (response.data.length < 100) break;
