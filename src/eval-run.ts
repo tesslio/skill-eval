@@ -20,7 +20,33 @@ function solutionScore(solution: RawSolution): number {
   if (results.length === 0) return 0;
   const earned = results.reduce((sum, r) => sum + r.score, 0);
   const max = results.reduce((sum, r) => sum + r.max_score, 0);
-  return max > 0 ? Math.round((earned / max) * 100) : 0;
+  return max > 0 ? (earned / max) * 100 : 0;
+}
+
+function averageSolutionScore(solutions: RawSolution[]): number {
+  return solutions.length > 0
+    ? Math.round(solutions.reduce((sum, solution) => sum + solutionScore(solution), 0) / solutions.length)
+    : 0;
+}
+
+function averageCriteria(solutions: RawSolution[]): EvalCriterion[] {
+  const criteria = new Map<string, { score: number; max: number; count: number; reasons: Set<string> }>();
+  for (const solution of solutions) {
+    for (const result of solution.assessmentResults ?? []) {
+      const criterion = criteria.get(result.name) ?? { score: 0, max: 0, count: 0, reasons: new Set<string>() };
+      criterion.score += result.score;
+      criterion.max += result.max_score;
+      criterion.count++;
+      if (result.reasoning) criterion.reasons.add(result.reasoning);
+      criteria.set(result.name, criterion);
+    }
+  }
+  return [...criteria].map(([name, criterion]) => ({
+    name,
+    score: criterion.score / criterion.count,
+    maxScore: criterion.max / criterion.count,
+    reasoning: [...criterion.reasons].join('\n\n'),
+  }));
 }
 
 /**
@@ -88,18 +114,13 @@ export function parseEvalViewOutput(
 
   for (const raw of rawScenarios) {
     const solutions = raw.solutions ?? [];
-    const baseline = solutions.find((s) => s.variant === 'baseline');
-    const withContext = solutions.find((s) => s.variant !== 'baseline');
+    const baseline = solutions.filter((s) => s.variant === 'baseline');
+    const withContext = solutions.filter((s) => s.variant !== 'baseline');
 
-    const baselineScoreVal = baseline ? solutionScore(baseline) : 0;
-    const withContextScoreVal = withContext ? solutionScore(withContext) : 0;
+    const baselineScoreVal = averageSolutionScore(baseline);
+    const withContextScoreVal = averageSolutionScore(withContext);
 
-    const criteria: EvalCriterion[] = (withContext?.assessmentResults ?? []).map((r) => ({
-      name: r.name,
-      score: r.score,
-      maxScore: r.max_score,
-      reasoning: r.reasoning,
-    }));
+    const criteria = averageCriteria(withContext);
 
     scenarios.push({
       name: raw.fingerprint.slice(0, 8),

@@ -3,6 +3,7 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
+
 mock.module('@actions/core', () => ({
   setFailed: mock(() => {}),
   getInput: mock(() => ''),
@@ -1009,5 +1010,41 @@ describe('generateAndDownloadScenarios', () => {
     const result = await generateAndDownloadScenarios(tileDir, 3, 1);
     expect(result.success).toBe(false);
     expect(result.error).toContain('parse');
+  });
+});
+
+describe('repeated eval scores', () => {
+  test('rounds only after averaging repetitions', async () => {
+    const { parseEvalViewOutput } = await import('./eval-run.ts');
+    const result = parseEvalViewOutput(JSON.stringify({
+      data: { id: 'run', attributes: { status: 'completed', scenarios: [{
+        id: 'scenario', fingerprint: 'scenario-1', solutions: [2, 0].map((score, index) => ({
+          id: `context-${index}`, variant: 'with-context',
+          assessmentResults: [{ name: 'correctness', score, max_score: 3, reasoning: '' }],
+        })),
+      }] } },
+    }), 'plugin', 'run');
+    expect(result.scenarios[0]?.withContextScore).toBe(33);
+    expect(result.overallScore).toBe(33);
+  });
+
+  test('averages every baseline and context repetition', async () => {
+    const { parseEvalViewOutput } = await import('./eval-run.ts');
+    const solution = (id: string, variant: string, score: number) => ({
+      id, variant, assessmentResults: [{ name: 'correctness', score, max_score: 100, reasoning: id }],
+    });
+    const result = parseEvalViewOutput(JSON.stringify({
+      data: { id: 'run', attributes: { status: 'completed', scenarios: [{
+        id: 'scenario', fingerprint: 'scenario-1', solutions: [
+          solution('baseline-1', 'baseline', 100), solution('context-1', 'with-context', 0),
+          solution('baseline-2', 'baseline', 0), solution('context-2', 'with-context', 100),
+        ],
+      }] } },
+    }), 'plugin', 'run');
+    expect(result.scenarios[0]?.baselineScore).toBe(50);
+    expect(result.scenarios[0]?.withContextScore).toBe(50);
+    expect(result.scenarios[0]?.delta).toBe(0);
+    expect(result.scenarios[0]?.criteria[0]?.score).toBe(50);
+    expect(result.overallScore).toBe(50);
   });
 });
