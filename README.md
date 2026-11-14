@@ -101,6 +101,9 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 | `test-mode` | Action development only. Uses mock scenarios and mock eval results without calling Tessl APIs. | `false` |
 | `tessl-token` | Tessl API token. Pass via secrets. | **(required)** |
 
+Failed or timed-out eval runs fail the check even when `eval-fail-on-regression`
+is `false`; that input controls only score regressions from completed runs.
+
 ## How it works
 
 1. Detects changed `SKILL.md` or `evals/**` files in the PR

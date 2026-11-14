@@ -23,7 +23,7 @@ import type { EvalResult } from './eval-types.ts';
 import { ensureProjectLinked } from './project-link.ts';
 import { generateAndDownloadScenarios } from './scenario-generate.ts';
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   // Opt-in/opt-out: check enabled input, then check for skip label
   const enabled = process.env.INPUT_ENABLED !== 'false';
   if (!enabled) {
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const skipLabel = process.env.INPUT_SKIP_LABEL || 'skip-eval';
+  const skipLabel = process.env.INPUT_SKIP_LABEL ?? 'skip-eval';
   if (skipLabel) {
     const labels = getPayloadLabels();
     if (labels.some((l) => l.name === skipLabel)) {
@@ -272,7 +272,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const pluginDirs = pluginsWithEvals;
+  let pluginDirs = pluginsWithEvals;
   if (pluginDirs.length === 0) {
     console.log('No plugins with eval scenarios to run. Skipping eval.');
     return;
@@ -299,7 +299,10 @@ async function main(): Promise<void> {
         core.warning(`Could not post eval re-run guide PR comment: ${msg}`);
       }
     }
-    return;
+    // Newly generated scenarios have not been evaluated yet. Only the plugins
+    // that already had scenarios require the human's rerun decision.
+    pluginDirs = pluginDirs.filter((dir) => !pluginsAlreadyHadEvals.includes(dir));
+    if (pluginDirs.length === 0) return;
   }
 
   const evalResults = testMode
@@ -522,7 +525,15 @@ async function runMockEvalAndReport(
   return evalResults;
 }
 
-function failForRegressions(evalResults: EvalResult[], failOnRegression: boolean): void {
+export function failForRegressions(evalResults: EvalResult[], failOnRegression: boolean): void {
+  const failures = evalResults.filter((result) => result.status !== 'completed' || result.error);
+  if (failures.length > 0) {
+    core.setFailed(
+      `Eval failed for ${failures.length} plugin(s):\n` +
+      failures.map((result) => `  ${result.tilePath}: ${result.error ?? result.status}`).join('\n'),
+    );
+    return;
+  }
   if (failOnRegression) {
     const regressions = evalResults.flatMap((r) =>
       r.scenarios

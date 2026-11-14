@@ -1,6 +1,10 @@
 import { describe, test, expect, mock, beforeEach, afterEach } from 'bun:test';
 import type { SkillReviewResult } from './skill-review.ts';
 
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 // ---------------------------------------------------------------------------
 // Mock @actions/core and @actions/github at module level
 // ---------------------------------------------------------------------------
@@ -53,7 +57,7 @@ mock.module('@actions/github', () => ({
 const { getChangedSkillFiles, getChangedEvalTargetFiles } = await import('./changed-files.ts');
 const { runSkillReview, extractJson } = await import('./skill-review.ts');
 const { postOrUpdateComment } = await import('./comment.ts');
-const { parsePositiveInt, isBotActor } = await import('./main.ts');
+const { parsePositiveInt, isBotActor, main, failForRegressions } = await import('./main.ts');
 const { parseTesslCommentCommand, isTrustedAuthorAssociation } = await import('./comment-command.ts');
 const { shouldRunPreflight, acknowledgeCommentCommand } = await import('./preflight.ts');
 const githubModule = await import('@actions/github');
@@ -816,5 +820,85 @@ describe('postOrUpdateComment', () => {
         50,
       ),
     ).rejects.toThrow('GITHUB_TOKEN is required');
+  });
+});
+
+describe('eval workflow regressions', () => {
+  const context = githubModule.context as unknown as { eventName: string; payload: Record<string, unknown>; actor?: string };
+  let savedEnv: NodeJS.ProcessEnv;
+  let savedPayload: Record<string, unknown>;
+  let savedEvent: string;
+  let savedActor: string | undefined;
+  let fixture: string;
+  beforeEach(() => {
+    savedEnv = { ...process.env };
+    savedPayload = context.payload;
+    savedEvent = context.eventName;
+    savedActor = context.actor;
+    fixture = mkdtempSync(join(tmpdir(), 'eval-workflow-'));
+    context.eventName = 'pull_request';
+    context.payload = { pull_request: { number: 42, labels: [] } };
+    context.actor = 'test-user';
+    process.env.GITHUB_TOKEN = 'fake-token';
+    process.env.INPUT_ENABLED = 'true';
+    process.env.INPUT_SKIP_LABEL = '';
+    process.env.INPUT_PATH = fixture;
+    process.env.INPUT_TEST_MODE = 'true';
+    process.env.INPUT_COMMENT = 'true';
+    process.env.INPUT_EVAL_GENERATE_SCENARIOS = 'true';
+    process.env.INPUT_EVAL_COMMIT_SCENARIOS = 'false';
+    listFilesMock.mockClear();
+    listCommentsMock.mockClear();
+    listCommentsMock.mockResolvedValue({ data: [] });
+    createCommentMock.mockClear();
+    setFailedMock.mockClear();
+  });
+  afterEach(() => {
+    for (const key of Object.keys(process.env)) if (!(key in savedEnv)) delete process.env[key];
+    Object.assign(process.env, savedEnv);
+    context.payload = savedPayload;
+    context.eventName = savedEvent;
+    context.actor = savedActor;
+    rmSync(fixture, { recursive: true, force: true });
+  });
+  test('empty skip-label disables preflight and main label checks', async () => {
+    context.payload = { pull_request: { number: 42, labels: [{ name: 'skip-eval' }] } };
+    expect(shouldRunPreflight()).toBe(true);
+    listFilesMock.mockResolvedValueOnce({ data: [] });
+    await main();
+    expect(listFilesMock).toHaveBeenCalled();
+  });
+  test('failed and timed-out evals fail the check with score gating disabled', () => {
+    for (const status of ['failed', 'timeout'] as const) {
+      setFailedMock.mockClear();
+      failForRegressions([{ tilePath: 'plugin', runId: 'run', status, overallScore: -1, scenarios: [], error: 'service unavailable' }], false);
+      expect(setFailedMock).toHaveBeenCalledWith(expect.stringContaining('service unavailable'));
+    }
+  });
+  test('new scenarios are evaluated when another changed plugin needs a rerun guide', async () => {
+    for (const name of ['existing', 'fresh']) {
+      mkdirSync(join(fixture, name, '.tessl-plugin'), { recursive: true });
+      writeFileSync(join(fixture, name, '.tessl-plugin', 'plugin.json'), '{}');
+      writeFileSync(join(fixture, name, 'SKILL.md'), '# Skill');
+    }
+    mkdirSync(join(fixture, 'existing', 'evals'));
+    listFilesMock.mockResolvedValueOnce({ data: [
+      { filename: 'existing/SKILL.md', status: 'modified' },
+      { filename: 'fresh/SKILL.md', status: 'added' },
+    ] });
+    await main();
+    const calls = createCommentMock.mock.calls as unknown as Array<[{ body: string }]>;
+    const result = calls.find(([params]) => params.body.startsWith('<!-- tessl-skill-eval -->'));
+    expect(result).toBeDefined();
+    expect(result?.[0].body).toContain('fresh');
+    expect(result?.[0].body).not.toContain(join(fixture, 'existing'));
+    expect(setFailedMock).not.toHaveBeenCalled();
+  });
+  test('deleted eval files still trigger the eval workflow', async () => {
+    listFilesMock.mockResolvedValueOnce({ data: [
+      { filename: 'plugin/evals/deleted/scenario.json', status: 'removed' },
+      { filename: 'plugin/SKILL.md', status: 'removed' },
+    ] });
+    expect(await getChangedEvalTargetFiles('.')).toEqual([join('plugin', 'evals', 'deleted', 'scenario.json')]);
   });
 });
