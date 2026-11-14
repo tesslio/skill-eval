@@ -10,7 +10,7 @@ export function shouldRunPreflight(): boolean {
     return false;
   }
 
-  const skipLabel = process.env.INPUT_SKIP_LABEL || 'skip-eval';
+  const skipLabel = process.env.INPUT_SKIP_LABEL ?? 'skip-eval';
   if (skipLabel && getPayloadLabels().some((label) => label.name === skipLabel)) {
     console.log(`Eval skipped — PR has "${skipLabel}" label.`);
     return false;
