@@ -314,6 +314,45 @@ describe('runEval', () => {
     ]);
   });
 
+  test('omits --skip-forced-context-activation by default', async () => {
+    const spawnMock = makeMockSpawn('', 'auth failed', 1);
+    delete process.env.TESSL_BIN;
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+
+    const { runEval } = await import('./eval-run.ts');
+    await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1, 1);
+
+    const firstCall = spawnMock.mock.calls[0] as unknown[];
+    expect(firstCall[0]).not.toContain('--skip-forced-context-activation');
+  });
+
+  test('appends --skip-forced-context-activation when requested', async () => {
+    const spawnMock = makeMockSpawn('', 'auth failed', 1);
+    delete process.env.TESSL_BIN;
+    // @ts-expect-error mock assignment
+    Bun.spawn = spawnMock;
+
+    const { runEval } = await import('./eval-run.ts');
+    await runEval('/some/tile', 'my-ws', 'claude:claude-sonnet-4-6', 1, 1, true);
+
+    const firstCall = spawnMock.mock.calls[0] as unknown[];
+    expect(firstCall[0]).toEqual([
+      'tessl',
+      'eval',
+      'run',
+      '/some/tile',
+      '--workspace',
+      'my-ws',
+      '--agent',
+      'claude:claude-sonnet-4-6',
+      '--runs',
+      '1',
+      '--json',
+      '--skip-forced-context-activation',
+    ]);
+  });
+
   test('falls back to PATH when TESSL_BIN is blank', async () => {
     process.env.TESSL_BIN = '   ';
 

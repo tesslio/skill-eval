@@ -98,8 +98,29 @@ Omit `cli-version` to keep using the latest Tessl CLI. Set it to a specific vers
 | `eval-generate-scenarios` | Generate fresh scenarios for tiles without `evals/` | `false` |
 | `eval-scenario-count` | Number of scenarios to generate per tile | `3` |
 | `eval-commit-scenarios` | Commit generated scenarios back to the PR branch (requires `contents: write`) | `false` |
+| `eval-skip-forced-context-activation` | Let the agent decide whether to use the injected context, instead of forcing it. Requires Tessl CLI `0.83.0` or later. | `false` |
 | `test-mode` | Action development only. Uses mock scenarios and mock eval results without calling Tessl APIs. | `false` |
 | `tessl-token` | Tessl API token. Pass via secrets. | **(required)** |
+
+### Evaluating whether a skill activates
+
+By default, `tessl eval run` forces the agent to use the injected context, so the
+with-context score measures how well the skill performs once it is in play. Set
+`eval-skip-forced-context-activation: true` to leave that choice to the agent, so
+the score also reflects whether the skill activates at all:
+
+```yaml
+- uses: tesslio/skill-eval@main
+  with:
+    eval-workspace: my-workspace
+    eval-skip-forced-context-activation: true
+    tessl-token: ${{ secrets.TESSL_TOKEN }}
+```
+
+This passes `--skip-forced-context-activation` to `tessl eval run`, which the
+Tessl CLI has supported since `0.83.0`. The action installs the latest CLI
+unless you pin `cli-version`; pinning anything older than `0.83.0` with this
+input enabled fails with an unknown-flag error.
 
 ## How it works
 
