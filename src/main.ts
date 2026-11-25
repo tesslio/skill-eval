@@ -50,6 +50,8 @@ async function main(): Promise<void> {
   const generateScenarios = process.env.INPUT_EVAL_GENERATE_SCENARIOS === 'true';
   const scenarioCount = parsePositiveInt(process.env.INPUT_EVAL_SCENARIO_COUNT, 'eval-scenario-count', 3);
   const commitScenarios = process.env.INPUT_EVAL_COMMIT_SCENARIOS === 'true';
+  const skipForcedContextActivation =
+    process.env.INPUT_EVAL_SKIP_FORCED_CONTEXT_ACTIVATION === 'true';
   const testMode = process.env.INPUT_TEST_MODE === 'true';
 
   const isIssueComment = github.context.eventName === 'issue_comment';
@@ -149,7 +151,7 @@ async function main(): Promise<void> {
     }, prNumber);
     const evalResults = testMode
       ? await runMockEvalAndReport([pluginDir], shouldComment, failOnRegression, prNumber)
-      : await runEvalAndReport([pluginDir], evalWorkspace, evalAgent, evalTimeout, evalRuns, shouldComment, failOnRegression, prNumber);
+      : await runEvalAndReport([pluginDir], evalWorkspace, evalAgent, evalTimeout, evalRuns, skipForcedContextActivation, shouldComment, failOnRegression, prNumber);
     const evalErrors = evalResults
       .filter((result) => result.error)
       .map((result) => `${result.tilePath}: ${result.error}`);
@@ -304,7 +306,7 @@ async function main(): Promise<void> {
 
   const evalResults = testMode
     ? await runMockEvalAndReport(pluginDirs, shouldComment, failOnRegression, prNumber)
-    : await runEvalAndReport(pluginDirs, evalWorkspace, evalAgent, evalTimeout, evalRuns, shouldComment, failOnRegression, prNumber);
+    : await runEvalAndReport(pluginDirs, evalWorkspace, evalAgent, evalTimeout, evalRuns, skipForcedContextActivation, shouldComment, failOnRegression, prNumber);
   failForRegressions(evalResults, failOnRegression);
 
   console.log('Eval completed.');
@@ -451,6 +453,7 @@ async function runEvalAndReport(
   evalAgent: string,
   evalTimeout: number,
   evalRuns: number,
+  skipForcedContextActivation: boolean,
   shouldComment: boolean,
   failOnRegression: boolean,
   prNumber: number | null,
@@ -460,7 +463,14 @@ async function runEvalAndReport(
   const evalResults = await Promise.all(
     pluginDirs.map(async (pluginDir) => {
       console.log(`  Starting eval for ${pluginDir}...`);
-      const result = await runEval(pluginDir, evalWorkspace, evalAgent, evalTimeout, evalRuns);
+      const result = await runEval(
+        pluginDir,
+        evalWorkspace,
+        evalAgent,
+        evalTimeout,
+        evalRuns,
+        skipForcedContextActivation,
+      );
       const status = result.error ? `ERROR: ${result.error}` : `score: ${result.overallScore}%`;
       console.log(`  ${pluginDir}: ${result.status} (${status})`);
       return result;

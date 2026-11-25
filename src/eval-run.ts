@@ -158,6 +158,7 @@ export async function runEval(
   agent: string,
   timeoutMinutes: number,
   runs: number,
+  skipForcedContextActivation = false,
 ): Promise<EvalResult> {
   const errorResult = (error: string): EvalResult => ({
     tilePath,
@@ -191,6 +192,11 @@ export async function runEval(
   // tile root, because the workspace is already declared in plugin.json/tile.json.
   if (workspace && !localPluginOrTile) {
     args.splice(4, 0, '--workspace', workspace);
+  }
+  // Requires Tessl CLI 0.83.0 or later; older pinned versions reject it as an
+  // unknown flag, so only send it when the caller asked for it.
+  if (skipForcedContextActivation) {
+    args.push('--skip-forced-context-activation');
   }
 
   const start = await runTesslCommand(args, evalCwd);

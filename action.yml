@@ -40,6 +40,9 @@ inputs:
   eval-commit-scenarios:
     description: 'Commit generated scenarios back to the PR branch (requires contents: write)'
     default: 'false'
+  eval-skip-forced-context-activation:
+    description: 'Let the agent decide whether to use the injected context, instead of forcing it. Requires Tessl CLI 0.83.0 or later.'
+    default: 'false'
   test-mode:
     description: 'Action development only: use mock scenario generation and mock eval results without calling Tessl APIs.'
     default: 'false'
@@ -85,6 +88,7 @@ runs:
         INPUT_EVAL_GENERATE_SCENARIOS: ${{ inputs.eval-generate-scenarios }}
         INPUT_EVAL_SCENARIO_COUNT: ${{ inputs.eval-scenario-count }}
         INPUT_EVAL_COMMIT_SCENARIOS: ${{ inputs.eval-commit-scenarios }}
+        INPUT_EVAL_SKIP_FORCED_CONTEXT_ACTIVATION: ${{ inputs.eval-skip-forced-context-activation }}
         INPUT_TEST_MODE: ${{ inputs.test-mode }}
         GITHUB_TOKEN: ${{ github.token }}
         TESSL_TOKEN: ${{ inputs.tessl-token }}
